@@ -18,24 +18,23 @@ jobs:
     - name: Checkout current repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # 获取所有历史，避免fast-forward问题
+        fetch-depth: 0
         
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y subversion jq
+        sudo apt-get install -y jq curl
         
     - name: Configure Git
       run: |
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git config --global user.name "github-actions[bot]"
-        git config --global pull.rebase false  # 使用merge而不是rebase
         
     - name: Pull latest changes
       run: |
         git pull origin main
         
-    - name: Pull directory using Git
+    - name: Pull directory using multiple methods
       run: |
         TARGET_DIR="${{ github.event.inputs.target_directory }}"
         DIR_NAME=$(echo "$TARGET_DIR" | awk -F'/' '{print $NF}')
@@ -46,44 +45,116 @@ jobs:
         echo "Target directory: $TARGET_DIR"
         echo "Directory name: $DIR_NAME"
         echo "Repo: $REPO_OWNER/$REPO_NAME"
-        echo "Sub path: $SUB_PATH"
+        echo "Sub path: '$SUB_PATH'"
         
-        # 创建临时目录
-        TEMP_DIR="temp_repo_$$"
-        mkdir "$TEMP_DIR"
-        
-        # 克隆仓库
-        echo "Cloning repository..."
-        git clone --depth 1 --filter=blob:none --sparse "https://github.com/$REPO_OWNER/$REPO_NAME.git" "$TEMP_DIR"
-        
-        cd "$TEMP_DIR"
-        git sparse-checkout set "$SUB_PATH"
-        
-        if [ -d "$SUB_PATH" ]; then
-          echo "Directory found, copying files..."
-          cd ..
-          if [ -d "$DIR_NAME" ]; then
-            rm -rf "$DIR_NAME"
-          fi
-          cp -r "$TEMP_DIR/$SUB_PATH" "$DIR_NAME"
-          echo "✅ Successfully pulled directory: $DIR_NAME"
-        else
-          echo "❌ Directory not found: $SUB_PATH"
-          # 尝试备选方法
-          cd ..
-          echo "Trying alternative method..."
-          # 使用git archive方法
-          if curl -s -L "https://github.com/$REPO_OWNER/$REPO_NAME/archive/refs/heads/main.tar.gz" | tar -xz --strip=2 --wildcards "*/$SUB_PATH/*" -O > /dev/null 2>&1; then
-            mkdir -p "$DIR_NAME"
-            curl -s -L "https://github.com/$REPO_OWNER/$REPO_NAME/archive/refs/heads/main.tar.gz" | tar -xz --strip=2 --wildcards "*/$SUB_PATH/*" -C "$DIR_NAME"
-            echo "✅ Successfully pulled directory via archive: $DIR_NAME"
-          else
-            echo "❌ All methods failed"
-            exit 1
-          fi
+        # 删除已存在的目录
+        if [ -d "$DIR_NAME" ]; then
+          echo "Removing existing directory: $DIR_NAME"
+          rm -rf "$DIR_NAME"
         fi
         
-        rm -rf "$TEMP_DIR"
+        # 方法1: 直接克隆整个仓库（当SUB_PATH为空时）
+        if [ -z "$SUB_PATH" ]; then
+          echo "No sub path provided, cloning entire repository..."
+          TEMP_DIR="temp_repo_$$"
+          git clone --depth 1 "https://github.com/$REPO_OWNER/$REPO_NAME.git" "$TEMP_DIR"
+          mv "$TEMP_DIR" "$DIR_NAME"
+          rm -rf "$DIR_NAME/.git"
+          echo "✅ Successfully cloned entire repository: $DIR_NAME"
+          
+        # 方法2: 使用sparse checkout（当有SUB_PATH时）
+        else
+          echo "Using sparse checkout for sub path..."
+          TEMP_DIR="temp_repo_$$"
+          mkdir "$TEMP_DIR"
+          cd "$TEMP_DIR"
+          
+          git init
+          git remote add origin "https://github.com/$REPO_OWNER/$REPO_NAME.git"
+          git config core.sparseCheckout true
+          
+          echo "$SUB_PATH/*" >> .git/info/sparse-checkout
+          
+          # 尝试不同的分支
+          if git pull origin main 2>/dev/null; then
+            echo "Pulled from main branch"
+          elif git pull origin master 2>/dev/null; then
+            echo "Pulled from master branch"
+          else
+            echo "Trying default branch..."
+            git pull origin HEAD
+          fi
+          
+          cd ..
+          
+          if [ -d "$TEMP_DIR/$SUB_PATH" ]; then
+            mv "$TEMP_DIR/$SUB_PATH" "$DIR_NAME"
+            rm -rf "$TEMP_DIR"
+            echo "✅ Successfully pulled directory: $DIR_NAME"
+          else
+            echo "❌ Sparse checkout failed, trying alternative methods..."
+            rm -rf "$TEMP_DIR"
+            
+            # 方法3: 使用GitHub API下载特定目录
+            echo "Trying GitHub API method..."
+            if command -v python3 >/dev/null 2>&1; then
+              python3 << EOF
+import os
+import requests
+import json
+import base64
+
+repo_owner = "$REPO_OWNER"
+repo_name = "$REPO_NAME"
+sub_path = "$SUB_PATH"
+dir_name = "$DIR_NAME"
+
+def download_directory(owner, repo, path, local_path):
+    # 获取目录内容
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    response = requests.get(url)
+    
+    if response.status_code != 200:
+        print(f"API request failed: {response.status_code}")
+        return False
+        
+    items = response.json()
+    
+    os.makedirs(local_path, exist_ok=True)
+    
+    for item in items:
+        if item['type'] == 'file':
+            # 下载文件
+            file_response = requests.get(item['download_url'])
+            if file_response.status_code == 200:
+                file_path = os.path.join(local_path, item['name'])
+                with open(file_path, 'wb') as f:
+                    f.write(file_response.content)
+                print(f"Downloaded: {item['name']}")
+        elif item['type'] == 'dir':
+            # 递归下载子目录
+            download_directory(owner, repo, f"{path}/{item['name']}", os.path.join(local_path, item['name']))
+    
+    return True
+
+if download_directory(repo_owner, repo_name, sub_path, dir_name):
+    print("✅ Successfully downloaded via GitHub API")
+else:
+    print("❌ GitHub API method failed")
+EOF
+            else
+              echo "Python3 not available, skipping API method"
+            fi
+            
+            # 检查是否成功创建目录
+            if [ -d "$DIR_NAME" ] && [ "$(ls -A "$DIR_NAME")" ]; then
+              echo "✅ Directory created successfully"
+            else
+              echo "❌ All methods failed to pull directory"
+              exit 1
+            fi
+          fi
+        fi
         
     - name: Update JSON history
       run: |
@@ -114,16 +185,13 @@ jobs:
         
     - name: Commit and push changes
       run: |
-        # 先拉取最新更改
         git pull origin main --no-rebase
-        
         git add .
         
         if git diff --staged --quiet; then
           echo "No changes to commit"
         else
           git commit -m "Auto-pull: ${{ github.event.inputs.target_directory }} [$(date +%Y-%m-%d)]"
-          # 强制推送（因为我们确保已经pull了最新更改）
           git push origin main
           echo "Changes committed and pushed"
         fi
