@@ -3,9 +3,20 @@ name: Sync Exact Path
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: '仓库路径：owner/repo 或 owner/repo/sub/dir/…'
+      mode:
+        description: '操作'
         required: true
+        type: choice
+        options:
+          - 新增或覆盖
+          - 仅更新已有
+      target:
+        description: '仓库路径：owner/repo 或 owner/repo/sub/dir/…  （更新模式可忽略）'
+        required: false
+        type: string
+      pick:
+        description: '请选择要更新的目录（多选按住 Ctrl/⌘）；留空=全更新'
+        required: false
         type: string
 
 jobs:
@@ -16,6 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup git
         run: |
@@ -27,69 +39,92 @@ jobs:
           mkdir -p third-party
           [ -f third-party/sources.json ] || echo '[]' >third-party/sources.json
 
+      # -------------- 动态生成可选目录列表 --------------
+      - name: Generate pick-list
+        if: github.event.inputs.mode == '仅更新已有'
+        id: list
+        run: |
+          # 把 dir 字段拼成逗号串，前端即可多选
+          LIST=$(jq -r '.[].dir' third-party/sources.json | paste -sd,)
+          echo "list=$LIST" >> $GITHUB_OUTPUT
+          # 如果手动没填 pick，就默认全选
+          PICK="${{ github.event.inputs.pick }}"
+          [ -z "$PICK" ] && PICK="$LIST"
+          echo "pick=$PICK" >> $GITHUB_OUTPUT
+
+      # -------------- 解析唯一输入框（新增模式才用）--------------
       - name: Parse target
+        if: github.event.inputs.mode == '新增或覆盖'
         id: parse
         run: |
-          # 去掉首尾空格
           T=$(echo "${{ github.event.inputs.target }}" | xargs)
-          # 按 / 拆
           IFS='/' read -ra A <<<"$T"
-          OWNER="${A[0]}"
-          REPO="${A[1]}"
-          # 剩余段
-          unset A[0] A[1]
+          OWNER="${A[0]}"; REPO="${A[1]}"
+          unset A[0]; unset A[1]
           SUBPATH="${A[*]}"
-          if [ -n "$SUBPATH" ]; then
-            DEST="$SUBPATH"
-          else
-            DEST="$REPO"        # 整库
-          fi
+          DEST=${SUBPATH:-$REPO}
           echo "owner=$OWNER"     >> $GITHUB_OUTPUT
           echo "repo=$REPO"       >> $GITHUB_OUTPUT
           echo "subpath=$SUBPATH" >> $GITHUB_OUTPUT
           echo "dest=$DEST"       >> $GITHUB_OUTPUT
 
-      - name: Sync target path
+      - name: Pull latest
+        run: git pull --rebase origin "${GITHUB_REF_NAME}"
+
+      # -------------- 新增 or 覆盖 --------------
+      - name: Add / Override
+        if: github.event.inputs.mode == '新增或覆盖'
         env:
-          OWNER: ${{ steps.parse.outputs.owner }}
-          REPO: ${{ steps.parse.outputs.repo }}
+          OWNER:   ${{ steps.parse.outputs.owner }}
+          REPO:    ${{ steps.parse.outputs.repo }}
           SUBPATH: ${{ steps.parse.outputs.subpath }}
-          DEST: ${{ steps.parse.outputs.dest }}
+          DEST:    ${{ steps.parse.outputs.dest }}
         run: |
           set -e
           URL="https://github.com/${OWNER}/${REPO}.git"
-
-          # 如果本地已存在就 pull，否则克隆子路径
-          if [ -d "$DEST/.git" ]; then
-            git -C "$DEST" pull --depth 1
-            NEW_SHA=$(git -C "$DEST" rev-parse HEAD)
+          rm -rf "$DEST"
+          if [ -n "$SUBPATH" ]; then
+            git clone --filter=blob:none --no-checkout "$URL" tmp-repo
+            cd tmp-repo
+            git sparse-checkout init --cone
+            git sparse-checkout set "$SUBPATH"
+            git checkout
+            mv "$SUBPATH" "../$DEST"
+            cd .. && rm -rf tmp-repo
           else
-            # 克隆子路径
-            if [ -n "$SUBPATH" ]; then
-              git clone --filter=blob:none --no-checkout "$URL" tmp-repo
-              cd tmp-repo
-              git sparse-checkout init --cone
-              git sparse-checkout set "$SUBPATH"
-              git checkout
-              mv "$SUBPATH" "../$DEST"
-              cd ..
-              rm -rf tmp-repo
-            else
-              git clone --depth 1 "$URL" "$DEST"
-            fi
-            NEW_SHA=$(git -C "$DEST" rev-parse HEAD)
+            git clone --depth 1 "$URL" "$DEST"
           fi
-
-          # 更新 sources.json（去旧加新）
+          NEW_SHA=$(git -C "$DEST" rev-parse HEAD)
+          # 登记
           jq --arg url "$URL" \
              --arg dir "$DEST" \
              --arg sha "$NEW_SHA" \
              --arg sub "$SUBPATH" \
-             'map(if .dir == $dir then . else empty end) |= [] |
+             'map(if .dir == $dir then empty else . end) |
               . += [{"url": $url, "dir": $dir, "commit": $sha, "subdir": $sub}]' \
              third-party/sources.json > tmp.json && mv tmp.json third-party/sources.json
-
-          # 提交
           git add third-party
-          git commit -m "bot: sync ${OWNER}/${REPO}${SUBPATH:+/$SUBPATH} -> $DEST" || echo "No changes"
+          git commit -m "bot: add/override ${OWNER}/${REPO}${SUBPATH:+/$SUBPATH} -> $DEST" || echo "No changes"
+          git push
+
+      # -------------- 仅更新已有 --------------
+      - name: Update selected
+        if: github.event.inputs.mode == '仅更新已有'
+        env:
+          PICK: ${{ steps.list.outputs.pick }}
+        run: |
+          set -e
+          # 把多选结果按逗号拆数组
+          IFS=',' read -ra DIRS <<<"$PICK"
+          for dir in "${DIRS[@]}"; do
+            [ -z "$dir" ] && continue
+            echo ">>> 更新 $dir"
+            if [ -d "$dir/.git" ]; then
+              git -C "$dir" pull --depth 1
+            else
+              echo "::$warning::$dir 不是仓库，跳过"
+            fi
+          done
+          git add third-party
+          git commit -m "bot: update selected third-party dirs" || echo "No changes"
           git push
