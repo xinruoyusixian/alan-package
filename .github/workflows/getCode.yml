@@ -11,15 +11,29 @@ on:
 jobs:
   pull-directory:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout current repository
       uses: actions/checkout@v4
-      
+      with:
+        fetch-depth: 0  # 获取所有历史，避免fast-forward问题
+        
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y subversion jq
+        
+    - name: Configure Git
+      run: |
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+        git config --global pull.rebase false  # 使用merge而不是rebase
+        
+    - name: Pull latest changes
+      run: |
+        git pull origin main
         
     - name: Pull directory using Git
       run: |
@@ -38,19 +52,15 @@ jobs:
         TEMP_DIR="temp_repo_$$"
         mkdir "$TEMP_DIR"
         
-        # 克隆仓库（浅克隆，只拉取最新commit）
+        # 克隆仓库
         echo "Cloning repository..."
         git clone --depth 1 --filter=blob:none --sparse "https://github.com/$REPO_OWNER/$REPO_NAME.git" "$TEMP_DIR"
         
         cd "$TEMP_DIR"
-        
-        # 设置sparse-checkout只拉取目标目录
         git sparse-checkout set "$SUB_PATH"
         
-        # 检查目录是否存在
         if [ -d "$SUB_PATH" ]; then
           echo "Directory found, copying files..."
-          # 复制到目标位置
           cd ..
           if [ -d "$DIR_NAME" ]; then
             rm -rf "$DIR_NAME"
@@ -59,25 +69,20 @@ jobs:
           echo "✅ Successfully pulled directory: $DIR_NAME"
         else
           echo "❌ Directory not found: $SUB_PATH"
-          # 尝试使用SVN作为备选方案
+          # 尝试备选方法
           cd ..
-          echo "Trying SVN as fallback..."
-          SVN_URL="https://github.com/$REPO_OWNER/$REPO_NAME/trunk/$SUB_PATH"
-          if svn export "$SVN_URL" "$DIR_NAME" --force 2>/dev/null; then
-            echo "✅ Successfully pulled directory via SVN: $DIR_NAME"
+          echo "Trying alternative method..."
+          # 使用git archive方法
+          if curl -s -L "https://github.com/$REPO_OWNER/$REPO_NAME/archive/refs/heads/main.tar.gz" | tar -xz --strip=2 --wildcards "*/$SUB_PATH/*" -O > /dev/null 2>&1; then
+            mkdir -p "$DIR_NAME"
+            curl -s -L "https://github.com/$REPO_OWNER/$REPO_NAME/archive/refs/heads/main.tar.gz" | tar -xz --strip=2 --wildcards "*/$SUB_PATH/*" -C "$DIR_NAME"
+            echo "✅ Successfully pulled directory via archive: $DIR_NAME"
           else
-            # 尝试branches/master
-            SVN_URL="https://github.com/$REPO_OWNER/$REPO_NAME/branches/master/$SUB_PATH"
-            if svn export "$SVN_URL" "$DIR_NAME" --force 2>/dev/null; then
-              echo "✅ Successfully pulled directory via SVN master: $DIR_NAME"
-            else
-              echo "❌ All methods failed to pull directory"
-              exit 1
-            fi
+            echo "❌ All methods failed"
+            exit 1
           fi
         fi
         
-        # 清理临时目录
         rm -rf "$TEMP_DIR"
         
     - name: Update JSON history
@@ -86,22 +91,17 @@ jobs:
         DIR_NAME=$(echo "$TARGET_DIR" | awk -F'/' '{print $NF}')
         JSON_FILE="pull_history.json"
         
-        # 创建JSON文件如果不存在
         if [ ! -f "$JSON_FILE" ]; then
           echo "[]" > "$JSON_FILE"
         fi
         
-        # 验证JSON文件格式
         if ! jq . "$JSON_FILE" > /dev/null 2>&1; then
-          echo "JSON file is invalid, recreating..."
           echo "[]" > "$JSON_FILE"
         fi
         
-        # 检查是否已存在相同记录
         EXISTS=$(jq --arg target "$TARGET_DIR" 'any(.[]; .target_path == $target)' "$JSON_FILE")
         
         if [ "$EXISTS" = "false" ]; then
-          # 添加新记录
           jq --arg target "$TARGET_DIR" \
              --arg local "$DIR_NAME" \
              --arg date "$(date -Iseconds)" \
@@ -112,20 +112,18 @@ jobs:
           echo "ℹ️ Record already exists for: $TARGET_DIR"
         fi
         
-        # 显示当前记录数量
-        COUNT=$(jq 'length' "$JSON_FILE")
-        echo "Total records in JSON: $COUNT"
-        
     - name: Commit and push changes
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
+        # 先拉取最新更改
+        git pull origin main --no-rebase
+        
         git add .
         
         if git diff --staged --quiet; then
           echo "No changes to commit"
         else
           git commit -m "Auto-pull: ${{ github.event.inputs.target_directory }} [$(date +%Y-%m-%d)]"
-          git push
+          # 强制推送（因为我们确保已经pull了最新更改）
+          git push origin main
           echo "Changes committed and pushed"
         fi
