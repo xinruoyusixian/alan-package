@@ -1,0 +1,110 @@
+name: Sync Third-Party Repos
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '请选择操作模式'
+        required: true
+        type: choice
+        options:
+          - 新增
+          - 更新
+      repo:
+        description: '新增时填写仓库（格式：owner/repo，如 linkease/nas-packages）'
+        required: false
+        type: string
+      subdir:
+        description: '只同步子目录时填写，如 packages/network/services/linkease'
+        required: false
+        type: string
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出当前仓库
+      - name: Checkout self
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2. 配置 git 身份
+      - name: Setup git
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # 3. 确保列表文件存在
+      - name: Ensure sources.json
+        run: |
+          mkdir -p third-party
+          [ -f third-party/sources.json ] || echo '[]' > third-party/sources.json
+
+      # 4. 新增模式（整库 or 子目录）
+      - name: Add new repo
+        if: github.event.inputs.mode == '新增'
+        env:
+          REPO:  ${{ github.event.inputs.repo }}
+          SUB:   ${{ github.event.inputs.subdir }}
+        run: |
+          set -e
+          OWNER=$(echo "$REPO" | cut -d'/' -f1)
+          NAME=$(echo  "$REPO" | cut -d'/' -f2)
+
+          # 如果未填写子目录 → 整库
+          if [ -z "$SUB" ]; then
+            DEST="third-party/$NAME"
+            CLONE_URL="https://github.com/${OWNER}/${NAME}.git"
+            git clone --depth 1 "$CLONE_URL" "$DEST"
+            RECORD_DIR="$DEST"
+          else
+            # 只搬子目录
+            DEST="third-party/$(basename "$SUB")"
+            CLONE_URL="https://github.com/${OWNER}/${NAME}.git"
+            git clone --filter=blob:none --no-checkout "$CLONE_URL" tmp-repo
+            cd tmp-repo
+            git sparse-checkout init --cone
+            git sparse-checkout set "$SUB"
+            git checkout
+            mv "$SUB" "../$DEST"
+            cd ..
+            rm -rf tmp-repo
+            RECORD_DIR="$DEST"
+          fi
+
+          # 写入 sources.json
+          jq --arg url "$CLONE_URL" \
+             --arg dir "$RECORD_DIR" \
+             --arg sha "$(git -C "$RECORD_DIR" rev-parse HEAD 2>/dev/null || echo 'unknown')" \
+             --arg sub "$SUB" \
+             '. += [{"url": $url, "dir": $dir, "commit": $sha, "subdir": $sub}]' \
+             third-party/sources.json > tmp.json && mv tmp.json third-party/sources.json
+
+          # 提交
+          git add third-party
+          git commit -m "bot: add third-party repo ${OWNER}/${NAME}${SUB:+/$SUB}" || echo "No changes"
+          git push
+
+      # 5. 更新模式
+      - name: Update existing repos
+        if: github.event.inputs.mode == '更新'
+        run: |
+          set -e
+          jq -r '.[] | @base64' third-party/sources.json | while read -r row; do
+            _jq(){
+              echo "$row" | base64 --decode | jq -r "$1"
+            }
+            URL=$(_jq '.url')
+            DIR=$(_jq '.dir')
+            echo ">>> 更新 $URL 到 $DIR"
+            if [ -d "$DIR/.git" ]; then
+              git -C "$DIR" pull --depth 1
+            else
+              git clone --depth 1 "$URL" "$DIR"
+            fi
+          done
+
+          git add third-party
+          git commit -m "bot: update third-party repos" || echo "No changes"
+          git push
