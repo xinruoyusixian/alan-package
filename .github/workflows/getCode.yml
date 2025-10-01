@@ -23,7 +23,8 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y jq curl
+        sudo apt-get install -y jq curl python3 python3-pip
+        pip3 install requests
         
     - name: Configure Git
       run: |
@@ -53,18 +54,82 @@ jobs:
           rm -rf "$DIR_NAME"
         fi
         
-        # 方法1: 直接克隆整个仓库（当SUB_PATH为空时）
-        if [ -z "$SUB_PATH" ]; then
-          echo "No sub path provided, cloning entire repository..."
-          TEMP_DIR="temp_repo_$$"
-          git clone --depth 1 "https://github.com/$REPO_OWNER/$REPO_NAME.git" "$TEMP_DIR"
-          mv "$TEMP_DIR" "$DIR_NAME"
-          rm -rf "$DIR_NAME/.git"
-          echo "✅ Successfully cloned entire repository: $DIR_NAME"
-          
-        # 方法2: 使用sparse checkout（当有SUB_PATH时）
+        # 创建Python脚本来处理目录下载
+        cat > download_dir.py << 'EOF'
+        import os
+        import sys
+        import requests
+        import json
+        from pathlib import Path
+        
+        def download_directory(owner, repo, path, local_path):
+            """使用GitHub API下载目录"""
+            url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+            headers = {'Accept': 'application/vnd.github.v3+json'}
+            
+            try:
+                response = requests.get(url, headers=headers)
+                if response.status_code != 200:
+                    print(f"API请求失败: {response.status_code}")
+                    return False
+                    
+                items = response.json()
+                
+                # 如果是文件而不是目录
+                if isinstance(items, dict) and items.get('type') == 'file':
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                    file_response = requests.get(items['download_url'])
+                    if file_response.status_code == 200:
+                        with open(local_path, 'wb') as f:
+                            f.write(file_response.content)
+                        print(f"下载文件: {os.path.basename(local_path)}")
+                        return True
+                    return False
+                
+                # 处理目录
+                os.makedirs(local_path, exist_ok=True)
+                downloaded_files = 0
+                
+                for item in items:
+                    if item['type'] == 'file':
+                        file_response = requests.get(item['download_url'])
+                        if file_response.status_code == 200:
+                            file_path = os.path.join(local_path, item['name'])
+                            with open(file_path, 'wb') as f:
+                                f.write(file_response.content)
+                            print(f"下载文件: {item['name']}")
+                            downloaded_files += 1
+                    elif item['type'] == 'dir':
+                        # 递归下载子目录
+                        sub_dir_path = os.path.join(local_path, item['name'])
+                        if download_directory(owner, repo, f"{path}/{item['name']}", sub_dir_path):
+                            downloaded_files += 1
+                
+                return downloaded_files > 0
+                
+            except Exception as e:
+                print(f"下载过程中出错: {str(e)}")
+                return False
+        
+        if __name__ == "__main__":
+            if len(sys.argv) != 5:
+                print("用法: python3 download_dir.py <owner> <repo> <path> <local_path>")
+                sys.exit(1)
+                
+            owner, repo, path, local_path = sys.argv[1:]
+            success = download_directory(owner, repo, path, local_path)
+            sys.exit(0 if success else 1)
+        EOF
+        
+        # 方法1: 使用GitHub API下载
+        echo "尝试使用GitHub API下载..."
+        if python3 download_dir.py "$REPO_OWNER" "$REPO_NAME" "$SUB_PATH" "$DIR_NAME"; then
+          echo "✅ 通过GitHub API成功下载目录: $DIR_NAME"
         else
-          echo "Using sparse checkout for sub path..."
+          echo "❌ GitHub API方法失败，尝试备用方法..."
+          
+          # 方法2: 使用git sparse checkout
+          echo "尝试使用git sparse checkout..."
           TEMP_DIR="temp_repo_$$"
           mkdir "$TEMP_DIR"
           cd "$TEMP_DIR"
@@ -73,88 +138,42 @@ jobs:
           git remote add origin "https://github.com/$REPO_OWNER/$REPO_NAME.git"
           git config core.sparseCheckout true
           
-          echo "$SUB_PATH/*" >> .git/info/sparse-checkout
+          # 设置sparse checkout路径
+          if [ -n "$SUB_PATH" ]; then
+            echo "$SUB_PATH/*" > .git/info/sparse-checkout
+          else
+            echo "/*" > .git/info/sparse-checkout
+          fi
           
           # 尝试不同的分支
-          if git pull origin main 2>/dev/null; then
-            echo "Pulled from main branch"
-          elif git pull origin master 2>/dev/null; then
-            echo "Pulled from master branch"
-          else
-            echo "Trying default branch..."
-            git pull origin HEAD
-          fi
+          BRANCHES=("main" "master" "HEAD")
+          for branch in "${BRANCHES[@]}"; do
+            if git pull origin "$branch" --depth=1 2>/dev/null; then
+              echo "从 $branch 分支拉取成功"
+              break
+            fi
+          done
           
           cd ..
           
-          if [ -d "$TEMP_DIR/$SUB_PATH" ]; then
+          # 移动文件到目标位置
+          if [ -n "$SUB_PATH" ] && [ -d "$TEMP_DIR/$SUB_PATH" ]; then
             mv "$TEMP_DIR/$SUB_PATH" "$DIR_NAME"
-            rm -rf "$TEMP_DIR"
-            echo "✅ Successfully pulled directory: $DIR_NAME"
+            echo "✅ 通过sparse checkout成功下载目录: $DIR_NAME"
+          elif [ -d "$TEMP_DIR" ] && [ "$(ls -A "$TEMP_DIR")" ]; then
+            mv "$TEMP_DIR" "$DIR_NAME"
+            echo "✅ 成功克隆整个仓库: $DIR_NAME"
           else
-            echo "❌ Sparse checkout failed, trying alternative methods..."
+            echo "❌ 所有方法都失败了"
             rm -rf "$TEMP_DIR"
-            
-            # 方法3: 使用GitHub API下载特定目录
-            echo "Trying GitHub API method..."
-            if command -v python3 >/dev/null 2>&1; then
-              python3 << EOF
-import os
-import requests
-import json
-import base64
-
-repo_owner = "$REPO_OWNER"
-repo_name = "$REPO_NAME"
-sub_path = "$SUB_PATH"
-dir_name = "$DIR_NAME"
-
-def download_directory(owner, repo, path, local_path):
-    # 获取目录内容
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-    response = requests.get(url)
-    
-    if response.status_code != 200:
-        print(f"API request failed: {response.status_code}")
-        return False
-        
-    items = response.json()
-    
-    os.makedirs(local_path, exist_ok=True)
-    
-    for item in items:
-        if item['type'] == 'file':
-            # 下载文件
-            file_response = requests.get(item['download_url'])
-            if file_response.status_code == 200:
-                file_path = os.path.join(local_path, item['name'])
-                with open(file_path, 'wb') as f:
-                    f.write(file_response.content)
-                print(f"Downloaded: {item['name']}")
-        elif item['type'] == 'dir':
-            # 递归下载子目录
-            download_directory(owner, repo, f"{path}/{item['name']}", os.path.join(local_path, item['name']))
-    
-    return True
-
-if download_directory(repo_owner, repo_name, sub_path, dir_name):
-    print("✅ Successfully downloaded via GitHub API")
-else:
-    print("❌ GitHub API method failed")
-EOF
-            else
-              echo "Python3 not available, skipping API method"
-            fi
-            
-            # 检查是否成功创建目录
-            if [ -d "$DIR_NAME" ] && [ "$(ls -A "$DIR_NAME")" ]; then
-              echo "✅ Directory created successfully"
-            else
-              echo "❌ All methods failed to pull directory"
-              exit 1
-            fi
+            exit 1
           fi
+          
+          rm -rf "$TEMP_DIR"
         fi
+        
+        # 清理临时文件
+        rm -f download_dir.py
         
     - name: Update JSON history
       run: |
@@ -178,9 +197,9 @@ EOF
              --arg date "$(date -Iseconds)" \
              '. += [{"target_path": $target, "local_path": $local, "pulled_at": $date, "status": "success"}]' \
              "$JSON_FILE" > tmp.json && mv tmp.json "$JSON_FILE"
-          echo "✅ Added new record for: $TARGET_DIR"
+          echo "✅ 添加新记录: $TARGET_DIR"
         else
-          echo "ℹ️ Record already exists for: $TARGET_DIR"
+          echo "ℹ️ 记录已存在: $TARGET_DIR"
         fi
         
     - name: Commit and push changes
@@ -189,9 +208,9 @@ EOF
         git add .
         
         if git diff --staged --quiet; then
-          echo "No changes to commit"
+          echo "没有更改需要提交"
         else
           git commit -m "Auto-pull: ${{ github.event.inputs.target_directory }} [$(date +%Y-%m-%d)]"
           git push origin main
-          echo "Changes committed and pushed"
+          echo "更改已提交并推送"
         fi
