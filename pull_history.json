@@ -22,5 +22,11 @@
     "local_path": "luci-app-wrtbwmon",
     "pulled_at": "2025-10-01T13:55:27+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "linkease/nas-packages/network/services/webdav2",
+    "local_path": "webdav2",
+    "pulled_at": "2025-10-01T14:03:15+00:00",
+    "status": "success"
   }
 ]
