@@ -1,4 +1,4 @@
-name: Pull Directory with SVN
+name: Pull Directory and Update JSON
 
 on:
   workflow_dispatch:
@@ -7,6 +7,8 @@ on:
         description: '目标目录路径 (如: linkease/nas-packages-luci/luci/luci-app-ddnsto)'
         required: true
         default: 'linkease/nas-packages-luci/luci/luci-app-ddnsto'
+  schedule:
+    - cron: '0 0 * * *'  # 每天自动运行
 
 jobs:
   pull-directory:
@@ -16,46 +18,133 @@ jobs:
     - name: Checkout current repository
       uses: actions/checkout@v4
       
-    - name: Pull directory using SVN
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+        
+    - name: Pull directory and update JSON
       run: |
-        TARGET_DIR="${{ github.event.inputs.target_directory }}"
-        DIR_NAME=$(echo "$TARGET_DIR" | awk -F'/' '{print $NF}')
-        REPO_URL="https://github.com/$(echo "$TARGET_DIR" | cut -d'/' -f1-2)/trunk/$(echo "$TARGET_DIR" | cut -d'/' -f3-)"
+        # 创建Python脚本处理目录拉取和JSON更新
+        cat > pull_directory.py << 'EOF'
+        import os
+        import json
+        import subprocess
+        import sys
+        from pathlib import Path
+        from urllib.parse import urljoin
         
-        echo "Pulling directory: $TARGET_DIR"
-        echo "Directory name: $DIR_NAME"
-        echo "SVN URL: $REPO_URL"
+        def pull_directory(target_path):
+            # 解析目标路径
+            parts = target_path.strip('/').split('/')
+            if len(parts) < 2:
+                print("Error: Invalid target path")
+                return False
+                
+            repo_owner = parts[0]
+            repo_name = parts[1]
+            directory_path = '/'.join(parts[2:])
+            target_dir_name = parts[-1]
+            
+            # GitHub API URL
+            api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{directory_path}"
+            
+            # 创建临时目录
+            temp_dir = "temp_pull"
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            try:
+                # 使用GitHub API获取目录内容
+                import requests
+                
+                response = requests.get(api_url)
+                if response.status_code != 200:
+                    print(f"Error: Failed to fetch directory info from {api_url}")
+                    return False
+                    
+                contents = response.json()
+                
+                # 下载所有文件
+                for item in contents:
+                    if item['type'] == 'file':
+                        file_response = requests.get(item['download_url'])
+                        if file_response.status_code == 200:
+                            file_path = os.path.join(temp_dir, item['name'])
+                            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                            with open(file_path, 'wb') as f:
+                                f.write(file_response.content)
+                            print(f"Downloaded: {item['name']}")
+                
+                # 复制文件到目标位置
+                target_dest = os.path.join(target_dir_name)
+                if os.path.exists(target_dest):
+                    import shutil
+                    shutil.rmtree(target_dest)
+                
+                if os.path.exists(temp_dir):
+                    # 如果temp_dir下有子目录，直接移动内容
+                    items = os.listdir(temp_dir)
+                    if len(items) == 1 and os.path.isdir(os.path.join(temp_dir, items[0])):
+                        # 如果只有一个子目录，移动子目录内容
+                        shutil.move(os.path.join(temp_dir, items[0]), target_dest)
+                    else:
+                        # 直接移动整个目录
+                        shutil.move(temp_dir, target_dest)
+                
+                # 更新JSON文件
+                update_json_file(target_path, target_dir_name)
+                
+                return True
+                
+            except Exception as e:
+                print(f"Error: {str(e)}")
+                # 清理临时目录
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+                return False
         
-        # 使用svn导出目录
-        svn export --force "$REPO_URL" "$DIR_NAME"
+        def update_json_file(target_path, local_path):
+            json_file = "pull_history.json"
+            history = []
+            
+            # 读取现有的JSON文件
+            if os.path.exists(json_file):
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    try:
+                        history = json.load(f)
+                        if not isinstance(history, list):
+                            history = []
+                    except:
+                        history = []
+            
+            # 检查是否已存在相同记录
+            exists = any(entry.get('target_path') == target_path for entry in history)
+            
+            if not exists:
+                new_entry = {
+                    "target_path": target_path,
+                    "local_path": local_path,
+                    "pulled_at": subprocess.getoutput('date -Iseconds'),
+                    "status": "success"
+                }
+                history.append(new_entry)
+                
+                # 写入JSON文件
+                with open(json_file, 'w', encoding='utf-8') as f:
+                    json.dump(history, f, indent=2, ensure_ascii=False)
+                
+                print(f"Added new record to {json_file}")
+            else:
+                print(f"Record for {target_path} already exists, skipping...")
         
-    - name: Update JSON history
-      run: |
-        TARGET_DIR="${{ github.event.inputs.target_directory }}"
-        DIR_NAME=$(echo "$TARGET_DIR" | awk -F'/' '{print $NF}')
-        JSON_FILE="pull_history.json"
+        if __name__ == "__main__":
+            target_path = sys.argv[1] if len(sys.argv) > 1 else '${{ github.event.inputs.target_directory }}'
+            success = pull_directory(target_path)
+            sys.exit(0 if success else 1)
+        EOF
         
-        # 读取或创建JSON文件
-        if [ -f "$JSON_FILE" ]; then
-          cat "$JSON_FILE" | jq . > /dev/null 2>&1 || echo "[]" > "$JSON_FILE"
-        else
-          echo "[]" > "$JSON_FILE"
-        fi
-        
-        # 检查是否已存在
-        EXISTS=$(jq --arg target "$TARGET_DIR" 'any(.[]; .target_path == $target)' "$JSON_FILE")
-        
-        if [ "$EXISTS" = "false" ]; then
-          # 添加新记录
-          jq --arg target "$TARGET_DIR" \
-             --arg local "$DIR_NAME" \
-             --arg date "$(date -Iseconds)" \
-             '. += [{"target_path": $target, "local_path": $local, "pulled_at": $date, "status": "success"}]' \
-             "$JSON_FILE" > tmp.json && mv tmp.json "$JSON_FILE"
-          echo "Added new record for $TARGET_DIR"
-        else
-          echo "Record for $TARGET_DIR already exists"
-        fi
+        # 运行Python脚本
+        python pull_directory.py "${{ github.event.inputs.target_directory }}"
         
     - name: Commit and push changes
       run: |
