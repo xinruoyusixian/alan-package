@@ -1,0 +1,91 @@
+name: Sync Third-Party Repos
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '请选择操作模式'
+        required: true
+        type: choice
+        options:
+          - 新增
+          - 更新
+      repo:
+        description: '新增时填写仓库（格式：owner/repo，如 linkease/nas-packages）'
+        required: false
+        type: string
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 把当前仓库代码拉下来
+      - name: Checkout self
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # 更新模式下需要写回，因此用 bot token 会更稳
+          # 如用 GITHUB_TOKEN 需把 Settings → Actions → Workflow permissions 设为可写
+
+      # 2. 配置 git 身份（commit 用）
+      - name: Setup git
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # 3. 初始化列表文件（如不存在）
+      - name: Ensure sources.json
+        run: |
+          mkdir -p third-party
+          [ -f third-party/sources.json ] || echo '[]' > third-party/sources.json
+
+      # 4. 新增模式
+      - name: Add new repo
+        if: github.event.inputs.mode == '新增'
+        env:
+          REPO: ${{ github.event.inputs.repo }}
+        run: |
+          set -e
+          OWNER=$(echo "$REPO" | cut -d'/' -f1)
+          NAME=$(echo  "$REPO" | cut -d'/' -f2)
+          DEST="third-party/$NAME"
+          CLONE_URL="https://github.com/${OWNER}/${NAME}.git"
+
+          echo ">>> 克隆 ${CLONE_URL} 到 ${DEST}"
+          git clone --depth 1 "$CLONE_URL" "$DEST"
+
+          echo ">>> 记录到 sources.json"
+          jq --arg url "$CLONE_URL" \
+             --arg dir "$DEST" \
+             --arg sha "$(git -C "$DEST" rev-parse HEAD)" \
+             '. += [{"url": $url, "dir": $dir, "commit": $sha}]' \
+             third-party/sources.json > tmp.json && mv tmp.json third-party/sources.json
+
+          echo ">>> 提交更改"
+          git add third-party
+          git commit -m "bot: add third-party repo ${OWNER}/${NAME}" || echo "No changes to commit"
+          git push
+
+      # 5. 更新模式
+      - name: Update existing repos
+        if: github.event.inputs.mode == '更新'
+        run: |
+          set -e
+          echo ">>> 读取 sources.json 并依次更新"
+          for row in $(jq -r '.[] | @base64' third-party/sources.json); do
+              _jq()  { echo "${row}" | base64 --decode | jq -r "${1}"; }
+              URL=$(_jq '.url')
+              DIR=$(_jq '.dir')
+              echo ">>> 更新 ${URL} 到 ${DIR}"
+              if [ -d "$DIR/.git" ]; then
+                git -C "$DIR" pull --depth 1
+              else
+                # 如果目录被误删，重新克隆
+                git clone --depth 1 "$URL" "$DIR"
+              fi
+          done
+
+          echo ">>> 提交更改"
+          git add third-party
+          git commit -m "bot: update third-party repos" || echo "No changes to commit"
+          git push
