@@ -1,95 +1,66 @@
-name: Sync Exact Path
+name: Pull Directory with SVN
 
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: '仓库路径：owner/repo 或 owner/repo/sub/dir/…'
+      target_directory:
+        description: '目标目录路径 (如: linkease/nas-packages-luci/luci/luci-app-ddnsto)'
         required: true
-        type: string
+        default: 'linkease/nas-packages-luci/luci/luci-app-ddnsto'
 
 jobs:
-  sync:
+  pull-directory:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout self
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup git
-        run: |
-          git config --global user.name  "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Ensure sources.json
-        run: |
-          mkdir -p third-party
-          [ -f third-party/sources.json ] || echo '[]' >third-party/sources.json
-
-      - name: Parse target
-        id: parse
-        run: |
-          # 去掉首尾空格
-          T=$(echo "${{ github.event.inputs.target }}" | xargs)
-          # 按 / 拆
-          IFS='/' read -ra A <<<"$T"
-          OWNER="${A[0]}"
-          REPO="${A[1]}"
-          # 剩余段
-          unset A[0] A[1]
-          SUBPATH="${A[*]}"
-          if [ -n "$SUBPATH" ]; then
-            DEST="$SUBPATH"
-          else
-            DEST="$REPO"        # 整库
-          fi
-          echo "owner=$OWNER"     >> $GITHUB_OUTPUT
-          echo "repo=$REPO"       >> $GITHUB_OUTPUT
-          echo "subpath=$SUBPATH" >> $GITHUB_OUTPUT
-          echo "dest=$DEST"       >> $GITHUB_OUTPUT
-
-      - name: Sync target path
-        env:
-          OWNER: ${{ steps.parse.outputs.owner }}
-          REPO: ${{ steps.parse.outputs.repo }}
-          SUBPATH: ${{ steps.parse.outputs.subpath }}
-          DEST: ${{ steps.parse.outputs.dest }}
-        run: |
-          set -e
-          URL="https://github.com/${OWNER}/${REPO}.git"
-
-          # 如果本地已存在就 pull，否则克隆子路径
-          if [ -d "$DEST/.git" ]; then
-            git -C "$DEST" pull --depth 1
-            NEW_SHA=$(git -C "$DEST" rev-parse HEAD)
-          else
-            # 克隆子路径
-            if [ -n "$SUBPATH" ]; then
-              git clone --filter=blob:none --no-checkout "$URL" tmp-repo
-              cd tmp-repo
-              git sparse-checkout init --cone
-              git sparse-checkout set "$SUBPATH"
-              git checkout
-              mv "$SUBPATH" "../$DEST"
-              cd ..
-              rm -rf tmp-repo
-            else
-              git clone --depth 1 "$URL" "$DEST"
-            fi
-            NEW_SHA=$(git -C "$DEST" rev-parse HEAD)
-          fi
-
-          # 更新 sources.json（去旧加新）
-          jq --arg url "$URL" \
-             --arg dir "$DEST" \
-             --arg sha "$NEW_SHA" \
-             --arg sub "$SUBPATH" \
-             'map(if .dir == $dir then . else empty end) |= [] |
-              . += [{"url": $url, "dir": $dir, "commit": $sha, "subdir": $sub}]' \
-             third-party/sources.json > tmp.json && mv tmp.json third-party/sources.json
-
-          # 提交
-          git add third-party
-          git commit -m "bot: sync ${OWNER}/${REPO}${SUBPATH:+/$SUBPATH} -> $DEST" || echo "No changes"
-          git push
+    - name: Checkout current repository
+      uses: actions/checkout@v4
+      
+    - name: Pull directory using SVN
+      run: |
+        TARGET_DIR="${{ github.event.inputs.target_directory }}"
+        DIR_NAME=$(echo "$TARGET_DIR" | awk -F'/' '{print $NF}')
+        REPO_URL="https://github.com/$(echo "$TARGET_DIR" | cut -d'/' -f1-2)/trunk/$(echo "$TARGET_DIR" | cut -d'/' -f3-)"
+        
+        echo "Pulling directory: $TARGET_DIR"
+        echo "Directory name: $DIR_NAME"
+        echo "SVN URL: $REPO_URL"
+        
+        # 使用svn导出目录
+        svn export --force "$REPO_URL" "$DIR_NAME"
+        
+    - name: Update JSON history
+      run: |
+        TARGET_DIR="${{ github.event.inputs.target_directory }}"
+        DIR_NAME=$(echo "$TARGET_DIR" | awk -F'/' '{print $NF}')
+        JSON_FILE="pull_history.json"
+        
+        # 读取或创建JSON文件
+        if [ -f "$JSON_FILE" ]; then
+          cat "$JSON_FILE" | jq . > /dev/null 2>&1 || echo "[]" > "$JSON_FILE"
+        else
+          echo "[]" > "$JSON_FILE"
+        fi
+        
+        # 检查是否已存在
+        EXISTS=$(jq --arg target "$TARGET_DIR" 'any(.[]; .target_path == $target)' "$JSON_FILE")
+        
+        if [ "$EXISTS" = "false" ]; then
+          # 添加新记录
+          jq --arg target "$TARGET_DIR" \
+             --arg local "$DIR_NAME" \
+             --arg date "$(date -Iseconds)" \
+             '. += [{"target_path": $target, "local_path": $local, "pulled_at": $date, "status": "success"}]' \
+             "$JSON_FILE" > tmp.json && mv tmp.json "$JSON_FILE"
+          echo "Added new record for $TARGET_DIR"
+        else
+          echo "Record for $TARGET_DIR already exists"
+        fi
+        
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git diff --staged --quiet || git commit -m "Auto-pull directory: ${{ github.event.inputs.target_directory }}"
+        git push
