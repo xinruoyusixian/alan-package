@@ -58,5 +58,11 @@
     "local_path": "luci-app-taskplan",
     "pulled_at": "2025-10-01T14:23:55+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "sirpdboy/luci-app-eqosplus",
+    "local_path": "luci-app-eqosplus",
+    "pulled_at": "2025-10-01T14:24:31+00:00",
+    "status": "success"
   }
 ]
