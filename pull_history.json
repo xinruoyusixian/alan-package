@@ -94,5 +94,11 @@
     "local_path": "luci-app-nft-timecontrol",
     "pulled_at": "2025-10-02T07:57:59+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "sirpdboy/luci-app-watchdog/watchdog",
+    "local_path": "watchdog",
+    "pulled_at": "2025-10-02T07:59:35+00:00",
+    "status": "success"
   }
 ]
