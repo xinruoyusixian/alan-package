@@ -4,22 +4,6 @@ function inInterfaces(host) {
 	return(interfaces ~ "(^| )" host "($| )")
 }
 
-function newRule(arp_ip, ipt_cmd) {
-	# checking for existing rules shouldn't be necessary if newRule is
-	# always called after db is read, arp table is read, and existing
-	# iptables rules are read.
-	ipt_cmd=iptKey " -t mangle -j RETURN -s " arp_ip
-	system(ipt_cmd " -C RRDIPT_FORWARD 2>/dev/null || " ipt_cmd " -A RRDIPT_FORWARD")
-	ipt_cmd=iptKey " -t mangle -j RETURN -d " arp_ip
-	system(ipt_cmd " -C RRDIPT_FORWARD 2>/dev/null || " ipt_cmd " -A RRDIPT_FORWARD")
-}
-
-function delRule(arp_ip, ipt_cmd) {
-	ipt_cmd=iptKey " -t mangle -D RRDIPT_FORWARD -j RETURN "
-	system(ipt_cmd "-s " arp_ip " 2>/dev/null")
-	system(ipt_cmd "-d " arp_ip " 2>/dev/null")
-}
-
 function total(i) {
 	return(bw[i "/in"] + bw[i "/out"])
 }
@@ -41,10 +25,10 @@ BEGIN {
 }
 
 # data from database; first file
-ARGIND==1 { #!@todo this doesn't help if the DB file is empty.
+ARGIND==1 {
 	lb=$1
 
-	if (lb !~ "^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$") next
+	if (lb !~ "^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$" && lb != "NFT") next
 
 	if (!(lb in mac)) {
 		mac[lb]		= $1
@@ -72,7 +56,6 @@ ARGIND==1 { #!@todo this doesn't help if the DB file is empty.
 	next
 }
 
-# not triggered on the first file
 FNR==1 {
 	FS=" "
 	if(ARGIND == 2) next
@@ -80,7 +63,6 @@ FNR==1 {
 
 # arp: ip hw flags hw_addr mask device
 ARGIND==2 {
-	#!@todo regex match IPs and MACs for sanity
 	if (ipv6) {
 		statFlag= ($4 != "FAILED" && $4 != "INCOMPLETE")
 		macAddr	= $5
@@ -106,61 +88,44 @@ ARGIND==2 {
 	next
 }
 
-#!@todo could use mangle chain totals or tailing "unnact" rules to
-# account for data for new hosts from their first presence on the
-# network to rule creation. The "unnact" rules would have to be
-# maintained at the end of the list, and new rules would be inserted
-# at the top.
-ARGIND==3 && NF==iptNF && $1!="pkts" { # iptables input
-	if (ipv6) {
-		lfn = 5
-		tag = "::/0"
-	} else {
-		lfn = 6
-		tag = "0.0.0.0/0"
-	}
-
-	if ($(lfn) != "*") {
-		m = $(lfn)
-		n = m "/in"
-	} else if ($(++lfn) != "*") {
-		m = $(lfn)
-		n = m "/out"
-	} else if ($(++lfn) != tag) {
-		m = $(lfn)
-		n = m "/out"
-	} else { # $(++lfn) != tag
-		m = $(++lfn)
-		n = m "/in"
-	}
-
-	if (mode == "diff" || mode == "noUpdate") print n, $2
-	if (mode != "noUpdate") {
-		if (inInterfaces(m)) { # if label is an interface
-			if (!(m in arp_mac)) {
-				cmd = "cat /sys/class/net/" m "/address"
-				cmd | getline arp_mac[m]
-				close(cmd)
-
-				if (length(arp_mac[m]) == 0) arp_mac[m] = "00:00:00:00:00:00"
-
-				arp_ip[m]		= "NA"
-				arp_inter[m] 		= m
-				arp_bw[m "/in"]		= 0
-				arp_bw[m "/out"]	= 0
-				arp_firstDate[m]	= systime()
-				arp_lastDate[m]		= arp_firstDate[m]
-				arp_ignore[lb]		= 1
+# NFTables stats parsing
+ARGIND==3 {
+	# parse lines like:
+	# iifname "eth0" counter packets 123 bytes 456 comment "eth0-INPUT"
+	if ($0 ~ /iifname/) {
+		match($0, /iifname \"([^\"]+)\" counter packets ([0-9]+) bytes ([0-9]+) comment \"([^\"]+)\"/, arr)
+		if (arr[1] != "") {
+			iface = arr[1]
+			pkts = arr[2]
+			bytes = arr[3]
+			comment = arr[4]
+			if (comment ~ /-INPUT$/) {
+				n = iface "/in"
+			} else if (comment ~ /-OUTPUT$/) {
+				n = iface "/out"
+			} else if (comment ~ /-FORWARD$/) {
+				n = iface "/out"
+			} else {
+				next
 			}
-		} else {
-			if (!(m in arp_mac)) hosts[m] = 0
-			else delete hosts[m]
-		}
-
-		if ($2 > 0) {
-			arp_bw[n]	= $2
-			arp_lastDate[m]	= systime()
-			arp_ignore[m]	= 0
+			lb = "NFT"
+			if (!(lb in mac)) {
+				mac[lb] = lb
+				ip[lb]  = lb
+				inter[lb] = iface
+				bw[lb "/in"]  = 0
+				bw[lb "/out"] = 0
+				firstDate[lb] = systime()
+				lastDate[lb]  = systime()
+				ignore[lb]    = 0
+			}
+			if (n == iface "/in") {
+				bw[lb "/in"] += bytes
+			} else {
+				bw[lb "/out"] += bytes
+			}
+			lastDate[lb] = systime()
+			ignore[lb] = 0
 		}
 	}
 }
@@ -205,9 +170,4 @@ END {
 			break
 		}
 	}
-
-	# for hosts without rules
-	for (i in hosts)
-		if (hosts[i]) newRule(i)
-		else delRule(i)
 }
