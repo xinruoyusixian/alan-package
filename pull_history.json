@@ -118,5 +118,11 @@
     "local_path": "luci-app-quickfile",
     "pulled_at": "2025-10-04T06:16:06+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "kenzok8/small-package/adguardhome",
+    "local_path": "adguardhome",
+    "pulled_at": "2025-10-04T06:37:43+00:00",
+    "status": "success"
   }
 ]
