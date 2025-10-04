@@ -154,5 +154,11 @@
     "local_path": "luci-theme-argon",
     "pulled_at": "2025-10-04T15:41:39+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "EasyTier/luci-app-easytier",
+    "local_path": "luci-app-easytier",
+    "pulled_at": "2025-10-04T16:14:43+00:00",
+    "status": "success"
   }
 ]
