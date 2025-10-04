@@ -142,5 +142,11 @@
     "local_path": "quickfile",
     "pulled_at": "2025-10-04T13:27:00+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "asvow/luci-app-tailscale",
+    "local_path": "luci-app-tailscale",
+    "pulled_at": "2025-10-04T15:41:06+00:00",
+    "status": "success"
   }
 ]
