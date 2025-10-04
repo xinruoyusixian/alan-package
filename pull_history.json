@@ -124,5 +124,11 @@
     "local_path": "adguardhome",
     "pulled_at": "2025-10-04T06:37:43+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "kenzok8/small-package/luci-app-adguardhome",
+    "local_path": "luci-app-adguardhome",
+    "pulled_at": "2025-10-04T06:38:12+00:00",
+    "status": "success"
   }
 ]
