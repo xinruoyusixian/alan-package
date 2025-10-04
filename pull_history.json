@@ -136,5 +136,11 @@
     "local_path": "luci-app-quickfile",
     "pulled_at": "2025-10-04T13:25:30+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "Jaykwok2999/luci-app-quickfile/quickfile",
+    "local_path": "quickfile",
+    "pulled_at": "2025-10-04T13:27:00+00:00",
+    "status": "success"
   }
 ]
