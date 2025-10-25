@@ -37,6 +37,9 @@ jobs:
         
     - name: Update existing directories
       run: |
+        # 禁用错误退出，确保脚本继续执行
+        set +e
+        
         FORCE_REFRESH="${{ github.event.inputs.force_refresh }}"
         JSON_FILE="pull_history.json"
         
@@ -59,9 +62,6 @@ jobs:
         SUCCESS_COUNT=0
         FAILED_COUNT=0
         NOT_EXIST_COUNT=0
-        
-        # 创建临时目录用于处理
-        TEMP_DIR=$(mktemp -d)
         
         # 处理每条记录
         for i in $(seq 0 $((RECORD_COUNT - 1))); do
@@ -90,81 +90,62 @@ jobs:
           echo "仓库: $REPO_OWNER/$REPO_NAME"
           echo "子路径: $SUB_PATH"
           
-          # 强制刷新：删除目录
-          if [ "$FORCE_REFRESH" = "true" ]; then
-            echo "强制刷新目录: $LOCAL_PATH"
-            rm -rf "$LOCAL_PATH"
-            mkdir -p "$LOCAL_PATH"
-          fi
+          # 创建临时目录
+          TEMP_DIR=$(mktemp -d)
           
-          # 方法1: 使用git sparse checkout
-          echo "尝试使用git sparse checkout下载..."
-          TEMP_REPO_DIR="$TEMP_DIR/repo_$i"
-          mkdir -p "$TEMP_REPO_DIR"
+          # 使用git clone --filter=blob:none来高效下载
+          echo "尝试使用git clone下载..."
           
-          cd "$TEMP_REPO_DIR"
-          git init -q
-          git remote add origin "https://github.com/$REPO_OWNER/$REPO_NAME.git"
-          git config core.sparseCheckout true
+          # 构建完整的GitHub URL
+          GIT_URL="https://github.com/$REPO_OWNER/$REPO_NAME.git"
           
-          # 设置sparse checkout路径
-          if [ -n "$SUB_PATH" ]; then
-            echo "$SUB_PATH/*" > .git/info/sparse-checkout
-          else
-            echo "/*" > .git/info/sparse-checkout
-          fi
-          
-          # 尝试不同的分支
-          BRANCHES=("main" "master" "HEAD")
-          GIT_SUCCESS=false
-          for branch in "${BRANCHES[@]}"; do
-            if git pull origin "$branch" --depth=1 --quiet 2>/dev/null; then
-              echo "✅ 从 $branch 分支拉取成功"
-              GIT_SUCCESS=true
-              break
+          # 尝试克隆仓库
+          if git clone --filter=blob:none --no-checkout --depth 1 --quiet "$GIT_URL" "$TEMP_DIR" 2>/dev/null; then
+            cd "$TEMP_DIR"
+            
+            # 配置sparse checkout
+            git sparse-checkout init --cone
+            if [ -n "$SUB_PATH" ]; then
+              git sparse-checkout set "$SUB_PATH"
             fi
-          done
-          
-          cd - > /dev/null
-          
-          if [ "$GIT_SUCCESS" = true ]; then
-            # 移动文件到目标位置
-            if [ -n "$SUB_PATH" ] && [ -d "$TEMP_REPO_DIR/$SUB_PATH" ]; then
-              # 删除目标目录内容
-              rm -rf "$LOCAL_PATH"/*
-              # 移动新内容
-              cp -r "$TEMP_REPO_DIR/$SUB_PATH"/* "$LOCAL_PATH"/ 2>/dev/null || true
-              echo "✅ 成功更新目录: $LOCAL_PATH"
-              ((SUCCESS_COUNT++))
-            elif [ -d "$TEMP_REPO_DIR" ]; then
-              # 删除目标目录内容
-              rm -rf "$LOCAL_PATH"/*
-              # 移动新内容
-              cp -r "$TEMP_REPO_DIR"/* "$LOCAL_PATH"/ 2>/dev/null || true
-              echo "✅ 成功更新目录: $LOCAL_PATH"
-              ((SUCCESS_COUNT++))
+            
+            # 检出文件
+            if git checkout --quiet; then
+              echo "✅ Git下载成功"
+              
+              # 复制文件到目标位置
+              if [ -n "$SUB_PATH" ] && [ -d "$TEMP_DIR/$SUB_PATH" ]; then
+                # 强制刷新：删除目录内容
+                if [ "$FORCE_REFRESH" = "true" ]; then
+                  rm -rf "$LOCAL_PATH"/*
+                fi
+                # 复制新内容
+                cp -r "$TEMP_DIR/$SUB_PATH"/* "$LOCAL_PATH"/ 2>/dev/null
+                echo "✅ 成功更新目录: $LOCAL_PATH"
+                ((SUCCESS_COUNT++))
+              else
+                echo "❌ 无法找到下载的内容"
+                ((FAILED_COUNT++))
+              fi
             else
-              echo "❌ 无法找到下载的内容"
+              echo "❌ Git检出失败"
               ((FAILED_COUNT++))
             fi
+            
+            cd - > /dev/null
           else
-            echo "❌ git下载失败"
+            echo "❌ Git克隆失败"
             ((FAILED_COUNT++))
           fi
           
-          # 清理临时仓库
-          rm -rf "$TEMP_REPO_DIR"
+          # 清理临时目录
+          rm -rf "$TEMP_DIR"
         done
-        
-        # 清理临时目录
-        rm -rf "$TEMP_DIR"
         
         # 更新JSON文件的时间戳
         if [ $SUCCESS_COUNT -gt 0 ] || [ $FAILED_COUNT -gt 0 ]; then
           CURRENT_DATE=$(date -Iseconds)
-          # 创建临时文件
           TMP_JSON=$(mktemp)
-          # 简化JSON更新，只更新时间戳
           jq --arg date "$CURRENT_DATE" 'map(.pulled_at = $date)' "$JSON_FILE" > "$TMP_JSON" && mv "$TMP_JSON" "$JSON_FILE"
           echo "✅ 已更新JSON文件时间戳"
         fi
