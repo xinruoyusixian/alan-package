@@ -35,7 +35,7 @@ jobs:
       run: |
         git pull origin main
         
-    - name: Update existing directories
+    - name: Update existing directories with flexible path handling
       run: |
         # 禁用错误退出，确保脚本继续执行
         set +e
@@ -71,9 +71,16 @@ jobs:
           # 提取记录信息
           TARGET_PATH=$(jq -r ".[$i].target_path" "$JSON_FILE")
           LOCAL_PATH=$(jq -r ".[$i].local_path" "$JSON_FILE")
+          REPO_OWNER=$(jq -r ".[$i].repo_owner" "$JSON_FILE")
+          REPO_NAME=$(jq -r ".[$i].repo_name" "$JSON_FILE")
+          SUB_PATH=$(jq -r ".[$i].sub_path" "$JSON_FILE")
+          PATH_TYPE=$(jq -r ".[$i].path_type" "$JSON_FILE")
           
           echo "目标路径: $TARGET_PATH"
           echo "本地路径: $LOCAL_PATH"
+          echo "仓库: $REPO_OWNER/$REPO_NAME"
+          echo "子路径: '$SUB_PATH'"
+          echo "路径类型: $PATH_TYPE"
           
           # 检查目录是否存在
           if [ ! -d "$LOCAL_PATH" ]; then
@@ -82,45 +89,53 @@ jobs:
             continue
           fi
           
-          # 解析目标路径
-          REPO_OWNER=$(echo "$TARGET_PATH" | cut -d'/' -f1)
-          REPO_NAME=$(echo "$TARGET_PATH" | cut -d'/' -f2)
-          SUB_PATH=$(echo "$TARGET_PATH" | cut -d'/' -f3-)
-          
-          echo "仓库: $REPO_OWNER/$REPO_NAME"
-          echo "子路径: $SUB_PATH"
-          
           # 创建临时目录
           TEMP_DIR=$(mktemp -d)
           
-          # 使用git clone --filter=blob:none来高效下载
+          # 使用git clone下载
           echo "尝试使用git clone下载..."
-          
-          # 构建完整的GitHub URL
           GIT_URL="https://github.com/$REPO_OWNER/$REPO_NAME.git"
           
-          # 尝试克隆仓库
           if git clone --filter=blob:none --no-checkout --depth 1 --quiet "$GIT_URL" "$TEMP_DIR" 2>/dev/null; then
             cd "$TEMP_DIR"
             
             # 配置sparse checkout
             git sparse-checkout init --cone
-            if [ -n "$SUB_PATH" ]; then
+            if [ -n "$SUB_PATH" ] && [ "$SUB_PATH" != "null" ]; then
+              echo "设置sparse checkout路径: $SUB_PATH"
               git sparse-checkout set "$SUB_PATH"
+            else
+              echo "拉取整个仓库"
+              git sparse-checkout set "/*"
             fi
             
             # 检出文件
             if git checkout --quiet; then
               echo "✅ Git下载成功"
               
-              # 复制文件到目标位置
-              if [ -n "$SUB_PATH" ] && [ -d "$TEMP_DIR/$SUB_PATH" ]; then
-                # 强制刷新：删除目录内容
-                if [ "$FORCE_REFRESH" = "true" ]; then
-                  rm -rf "$LOCAL_PATH"/*
-                fi
-                # 复制新内容
-                cp -r "$TEMP_DIR/$SUB_PATH"/* "$LOCAL_PATH"/ 2>/dev/null
+              # 强制刷新：删除目录内容
+              if [ "$FORCE_REFRESH" = "true" ]; then
+                echo "强制刷新目录: $LOCAL_PATH"
+                rm -rf "$LOCAL_PATH"/*
+              fi
+              
+              # 根据路径类型复制文件
+              if [ -n "$SUB_PATH" ] && [ "$SUB_PATH" != "null" ] && [ -d "$TEMP_DIR/$SUB_PATH" ]; then
+                # 有子路径的情况
+                echo "复制子目录内容: $SUB_PATH -> $LOCAL_PATH"
+                cp -r "$TEMP_DIR/$SUB_PATH"/* "$LOCAL_PATH"/ 2>/dev/null || true
+                echo "✅ 成功更新目录: $LOCAL_PATH"
+                ((SUCCESS_COUNT++))
+              elif [ -d "$TEMP_DIR" ]; then
+                # 整个仓库的情况
+                echo "复制整个仓库内容 -> $LOCAL_PATH"
+                # 排除.git目录
+                find "$TEMP_DIR" -maxdepth 1 -name ".git" -prune -o -type f -print -o -type d -print | \
+                  while read item; do
+                    if [ "$item" != "$TEMP_DIR/.git" ] && [ "$item" != "$TEMP_DIR" ]; then
+                      cp -r "$item" "$LOCAL_PATH"/ 2>/dev/null || true
+                    fi
+                  done
                 echo "✅ 成功更新目录: $LOCAL_PATH"
                 ((SUCCESS_COUNT++))
               else
