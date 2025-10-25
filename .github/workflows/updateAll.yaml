@@ -173,15 +173,15 @@ jobs:
             print(f"尝试使用GitHub API下载 {owner}/{repo}/{path}...")
             if download_directory(owner, repo, path, local_path):
                 print(f"✅ 通过GitHub API成功下载目录: {local_path}")
-                sys.exit(0)
+                sys.exit(0)  # 成功退出码
             else:
                 print("❌ GitHub API方法失败，尝试备用方法...")
                 # 方法2: 使用git sparse checkout
                 if git_sparse_checkout(owner, repo, path, local_path):
-                    sys.exit(0)
+                    sys.exit(0)  # 成功退出码
                 else:
                     print("❌ 所有方法都失败了")
-                    sys.exit(1)
+                    sys.exit(1)  # 失败退出码
         EOF
         
     - name: Update existing directories from history
@@ -206,12 +206,11 @@ jobs:
         
         # 创建更新后的JSON
         UPDATED_JSON=$(mktemp)
-        CURRENT_DATE=$(date -Iseconds)
+        cp "$JSON_FILE" "$UPDATED_JSON"
         
         # 统计变量
         SUCCESS_COUNT=0
         FAILED_COUNT=0
-        SKIPPED_COUNT=0
         NOT_EXIST_COUNT=0
         
         # 处理每条记录
@@ -242,7 +241,15 @@ jobs:
               rm -rf "$LOCAL_PATH"
             fi
             
-            if python3 download_dir.py "$REPO_OWNER" "$REPO_NAME" "$SUB_PATH" "$LOCAL_PATH"; then
+            # 使用临时变量捕获退出码，而不是直接退出
+            set +e
+            python3 download_dir.py "$REPO_OWNER" "$REPO_NAME" "$SUB_PATH" "$LOCAL_PATH"
+            DOWNLOAD_EXIT_CODE=$?
+            set -e
+            
+            CURRENT_DATE=$(date -Iseconds)
+            
+            if [ $DOWNLOAD_EXIT_CODE -eq 0 ]; then
               STATUS="success"
               echo "✅ 成功更新: $LOCAL_PATH"
               ((SUCCESS_COUNT++))
@@ -258,13 +265,16 @@ jobs:
              --arg status "$STATUS" \
              --arg date "$CURRENT_DATE" \
              '.[$index].status = $status | .[$index].pulled_at = $date' \
-             "$JSON_FILE" > "$UPDATED_JSON" && mv "$UPDATED_JSON" "$JSON_FILE"
+             "$UPDATED_JSON" > tmp.json && mv tmp.json "$UPDATED_JSON"
              
           echo "更新状态: $STATUS"
         done
         
+        # 将更新后的JSON写回原文件
+        mv "$UPDATED_JSON" "$JSON_FILE"
+        
         # 清理临时文件
-        rm -f download_dir.py "$UPDATED_JSON"
+        rm -f download_dir.py tmp.json
         
         echo "==========================================="
         echo "✅ 更新完成"
@@ -278,6 +288,7 @@ jobs:
         # 如果有失败的项目，非零退出
         if [ "$FAILED_COUNT" -gt 0 ]; then
           echo "警告: $FAILED_COUNT 个项目更新失败"
+          exit 1
         fi
         
     - name: Commit and push changes
