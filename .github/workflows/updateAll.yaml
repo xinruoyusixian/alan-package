@@ -260,21 +260,26 @@ jobs:
             fi
           fi
           
-          # 更新JSON记录
-          jq --argjson index "$i" \
-             --arg status "$STATUS" \
-             --arg date "$CURRENT_DATE" \
-             '.[$index].status = $status | .[$index].pulled_at = $date' \
-             "$UPDATED_JSON" > tmp.json && mv tmp.json "$UPDATED_JSON"
-             
-          echo "更新状态: $STATUS"
+          # 更新JSON记录 - 使用更安全的方法
+          TMP_JSON=$(mktemp)
+          if jq --argjson index "$i" \
+                --arg status "$STATUS" \
+                --arg date "$CURRENT_DATE" \
+                '.[$index].status = $status | .[$index].pulled_at = $date' \
+                "$UPDATED_JSON" > "$TMP_JSON"; then
+            mv "$TMP_JSON" "$UPDATED_JSON"
+            echo "更新状态: $STATUS"
+          else
+            echo "❌ 更新JSON记录失败，跳过状态更新"
+            rm -f "$TMP_JSON"
+          fi
         done
         
         # 将更新后的JSON写回原文件
         mv "$UPDATED_JSON" "$JSON_FILE"
         
         # 清理临时文件
-        rm -f download_dir.py tmp.json
+        rm -f download_dir.py
         
         echo "==========================================="
         echo "✅ 更新完成"
