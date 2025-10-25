@@ -24,8 +24,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y jq curl python3 python3-pip
-        pip3 install requests
+        sudo apt-get install -y jq curl git
         
     - name: Configure Git
       run: |
@@ -36,155 +35,7 @@ jobs:
       run: |
         git pull origin main
         
-    - name: Create directory download script
-      run: |
-        cat > download_dir.py << 'EOF'
-        import os
-        import sys
-        import requests
-        import json
-        from pathlib import Path
-        
-        def download_directory(owner, repo, path, local_path):
-            """使用GitHub API下载目录"""
-            url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
-            headers = {'Accept': 'application/vnd.github.v3+json'}
-            
-            try:
-                response = requests.get(url, headers=headers)
-                if response.status_code != 200:
-                    print(f"API请求失败: {response.status_code}")
-                    return False
-                    
-                items = response.json()
-                
-                # 如果是文件而不是目录
-                if isinstance(items, dict) and items.get('type') == 'file':
-                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                    file_response = requests.get(items['download_url'])
-                    if file_response.status_code == 200:
-                        with open(local_path, 'wb') as f:
-                            f.write(file_response.content)
-                        print(f"下载文件: {os.path.basename(local_path)}")
-                        return True
-                    return False
-                
-                # 处理目录
-                os.makedirs(local_path, exist_ok=True)
-                downloaded_files = 0
-                
-                for item in items:
-                    if item['type'] == 'file':
-                        file_response = requests.get(item['download_url'])
-                        if file_response.status_code == 200:
-                            file_path = os.path.join(local_path, item['name'])
-                            with open(file_path, 'wb') as f:
-                                f.write(file_response.content)
-                            print(f"下载文件: {item['name']}")
-                            downloaded_files += 1
-                    elif item['type'] == 'dir':
-                        # 递归下载子目录
-                        sub_dir_path = os.path.join(local_path, item['name'])
-                        if download_directory(owner, repo, f"{path}/{item['name']}", sub_dir_path):
-                            downloaded_files += 1
-                
-                return downloaded_files > 0
-                
-            except Exception as e:
-                print(f"下载过程中出错: {str(e)}")
-                return False
-        
-        def git_sparse_checkout(owner, repo, path, local_path):
-            """使用git sparse checkout下载目录"""
-            import subprocess
-            import tempfile
-            import shutil
-            
-            temp_dir = tempfile.mkdtemp()
-            try:
-                # 进入临时目录
-                os.chdir(temp_dir)
-                
-                # 初始化git仓库
-                subprocess.run(['git', 'init'], check=True, capture_output=True)
-                subprocess.run(['git', 'remote', 'add', 'origin', f'https://github.com/{owner}/{repo}.git'], check=True, capture_output=True)
-                subprocess.run(['git', 'config', 'core.sparseCheckout', 'true'], check=True, capture_output=True)
-                
-                # 设置sparse checkout路径
-                sparse_checkout_path = '.git/info/sparse-checkout'
-                os.makedirs(os.path.dirname(sparse_checkout_path), exist_ok=True)
-                with open(sparse_checkout_path, 'w') as f:
-                    if path:
-                        f.write(f"{path}/*\n")
-                    else:
-                        f.write("/*\n")
-                
-                # 尝试不同的分支
-                branches = ["main", "master", "HEAD"]
-                success = False
-                for branch in branches:
-                    try:
-                        result = subprocess.run(['git', 'pull', 'origin', branch, '--depth=1'], capture_output=True, text=True)
-                        if result.returncode == 0:
-                            print(f"从 {branch} 分支拉取成功")
-                            success = True
-                            break
-                    except:
-                        continue
-                
-                if not success:
-                    return False
-                
-                # 回到工作目录
-                os.chdir("..")
-                
-                # 移动文件到目标位置
-                if path and os.path.exists(os.path.join(temp_dir, path)):
-                    if os.path.exists(local_path):
-                        shutil.rmtree(local_path)
-                    shutil.move(os.path.join(temp_dir, path), local_path)
-                    print(f"✅ 通过sparse checkout成功下载目录: {local_path}")
-                elif os.path.exists(temp_dir) and len(os.listdir(temp_dir)) > 0:
-                    if os.path.exists(local_path):
-                        shutil.rmtree(local_path)
-                    shutil.move(temp_dir, local_path)
-                    print(f"✅ 成功克隆整个仓库: {local_path}")
-                else:
-                    return False
-                
-                return True
-                
-            except Exception as e:
-                print(f"sparse checkout失败: {str(e)}")
-                return False
-            finally:
-                # 清理临时目录
-                if os.path.exists(temp_dir):
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-        
-        if __name__ == "__main__":
-            if len(sys.argv) != 5:
-                print("用法: python3 download_dir.py <owner> <repo> <path> <local_path>")
-                sys.exit(1)
-                
-            owner, repo, path, local_path = sys.argv[1:]
-            
-            # 方法1: 使用GitHub API下载
-            print(f"尝试使用GitHub API下载 {owner}/{repo}/{path}...")
-            if download_directory(owner, repo, path, local_path):
-                print(f"✅ 通过GitHub API成功下载目录: {local_path}")
-                sys.exit(0)  # 成功退出码
-            else:
-                print("❌ GitHub API方法失败，尝试备用方法...")
-                # 方法2: 使用git sparse checkout
-                if git_sparse_checkout(owner, repo, path, local_path):
-                    sys.exit(0)  # 成功退出码
-                else:
-                    print("❌ 所有方法都失败了")
-                    sys.exit(1)  # 失败退出码
-        EOF
-        
-    - name: Update existing directories from history
+    - name: Update existing directories
       run: |
         FORCE_REFRESH="${{ github.event.inputs.force_refresh }}"
         JSON_FILE="pull_history.json"
@@ -204,82 +55,120 @@ jobs:
         RECORD_COUNT=$(jq 'length' "$JSON_FILE")
         echo "找到 $RECORD_COUNT 条历史记录"
         
-        # 创建更新后的JSON
-        UPDATED_JSON=$(mktemp)
-        cp "$JSON_FILE" "$UPDATED_JSON"
-        
         # 统计变量
         SUCCESS_COUNT=0
         FAILED_COUNT=0
         NOT_EXIST_COUNT=0
         
+        # 创建临时目录用于处理
+        TEMP_DIR=$(mktemp -d)
+        
         # 处理每条记录
         for i in $(seq 0 $((RECORD_COUNT - 1))); do
+          echo "==========================================="
+          echo "处理项目 $((i + 1))/$RECORD_COUNT"
+          
+          # 提取记录信息
           TARGET_PATH=$(jq -r ".[$i].target_path" "$JSON_FILE")
           LOCAL_PATH=$(jq -r ".[$i].local_path" "$JSON_FILE")
-          PREVIOUS_DATE=$(jq -r ".[$i].pulled_at" "$JSON_FILE")
           
-          echo "==========================================="
-          echo "处理项目 $((i + 1))/$RECORD_COUNT: $TARGET_PATH"
+          echo "目标路径: $TARGET_PATH"
           echo "本地路径: $LOCAL_PATH"
           
           # 检查目录是否存在
           if [ ! -d "$LOCAL_PATH" ]; then
             echo "❌ 目录不存在，跳过: $LOCAL_PATH"
-            STATUS="not_exist"
-            CURRENT_DATE="$PREVIOUS_DATE"  # 保持原日期
             ((NOT_EXIST_COUNT++))
-          else
-            # 解析目标路径
-            REPO_OWNER=$(echo "$TARGET_PATH" | cut -d'/' -f1)
-            REPO_NAME=$(echo "$TARGET_PATH" | cut -d'/' -f2)
-            SUB_PATH=$(echo "$TARGET_PATH" | cut -d'/' -f3-)
-            
-            # 下载目录（强制刷新或正常更新）
-            if [ "$FORCE_REFRESH" = "true" ]; then
-              echo "强制刷新目录: $LOCAL_PATH"
-              rm -rf "$LOCAL_PATH"
-            fi
-            
-            # 使用临时变量捕获退出码，而不是直接退出
-            set +e
-            python3 download_dir.py "$REPO_OWNER" "$REPO_NAME" "$SUB_PATH" "$LOCAL_PATH"
-            DOWNLOAD_EXIT_CODE=$?
-            set -e
-            
-            CURRENT_DATE=$(date -Iseconds)
-            
-            if [ $DOWNLOAD_EXIT_CODE -eq 0 ]; then
-              STATUS="success"
-              echo "✅ 成功更新: $LOCAL_PATH"
-              ((SUCCESS_COUNT++))
-            else
-              STATUS="failed"
-              echo "❌ 更新失败: $LOCAL_PATH"
-              ((FAILED_COUNT++))
-            fi
+            continue
           fi
           
-          # 更新JSON记录 - 使用更安全的方法
-          TMP_JSON=$(mktemp)
-          if jq --argjson index "$i" \
-                --arg status "$STATUS" \
-                --arg date "$CURRENT_DATE" \
-                '.[$index].status = $status | .[$index].pulled_at = $date' \
-                "$UPDATED_JSON" > "$TMP_JSON"; then
-            mv "$TMP_JSON" "$UPDATED_JSON"
-            echo "更新状态: $STATUS"
-          else
-            echo "❌ 更新JSON记录失败，跳过状态更新"
-            rm -f "$TMP_JSON"
+          # 解析目标路径
+          REPO_OWNER=$(echo "$TARGET_PATH" | cut -d'/' -f1)
+          REPO_NAME=$(echo "$TARGET_PATH" | cut -d'/' -f2)
+          SUB_PATH=$(echo "$TARGET_PATH" | cut -d'/' -f3-)
+          
+          echo "仓库: $REPO_OWNER/$REPO_NAME"
+          echo "子路径: $SUB_PATH"
+          
+          # 强制刷新：删除目录
+          if [ "$FORCE_REFRESH" = "true" ]; then
+            echo "强制刷新目录: $LOCAL_PATH"
+            rm -rf "$LOCAL_PATH"
+            mkdir -p "$LOCAL_PATH"
           fi
+          
+          # 方法1: 使用git sparse checkout
+          echo "尝试使用git sparse checkout下载..."
+          TEMP_REPO_DIR="$TEMP_DIR/repo_$i"
+          mkdir -p "$TEMP_REPO_DIR"
+          
+          cd "$TEMP_REPO_DIR"
+          git init
+          git remote add origin "https://github.com/$REPO_OWNER/$REPO_NAME.git"
+          git config core.sparseCheckout true
+          
+          # 设置sparse checkout路径
+          if [ -n "$SUB_PATH" ]; then
+            echo "$SUB_PATH/*" > .git/info/sparse-checkout
+          else
+            echo "/*" > .git/info/sparse-checkout
+          fi
+          
+          # 尝试不同的分支
+          BRANCHES=("main" "master" "HEAD")
+          GIT_SUCCESS=false
+          for branch in "${BRANCHES[@]}"; do
+            if git pull origin "$branch" --depth=1 --quiet 2>/dev/null; then
+              echo "✅ 从 $branch 分支拉取成功"
+              GIT_SUCCESS=true
+              break
+            fi
+          done
+          
+          cd - > /dev/null
+          
+          if [ "$GIT_SUCCESS" = true ]; then
+            # 移动文件到目标位置
+            if [ -n "$SUB_PATH" ] && [ -d "$TEMP_REPO_DIR/$SUB_PATH" ]; then
+              # 删除目标目录内容
+              rm -rf "$LOCAL_PATH"/*
+              # 移动新内容
+              cp -r "$TEMP_REPO_DIR/$SUB_PATH"/* "$LOCAL_PATH"/ 2>/dev/null || true
+              echo "✅ 成功更新目录: $LOCAL_PATH"
+              ((SUCCESS_COUNT++))
+            elif [ -d "$TEMP_REPO_DIR" ]; then
+              # 删除目标目录内容
+              rm -rf "$LOCAL_PATH"/*
+              # 移动新内容
+              cp -r "$TEMP_REPO_DIR"/* "$LOCAL_PATH"/ 2>/dev/null || true
+              echo "✅ 成功更新目录: $LOCAL_PATH"
+              ((SUCCESS_COUNT++))
+            else
+              echo "❌ 无法找到下载的内容"
+              ((FAILED_COUNT++))
+            fi
+          else
+            echo "❌ git下载失败"
+            ((FAILED_COUNT++))
+          fi
+          
+          # 清理临时仓库
+          rm -rf "$TEMP_REPO_DIR"
         done
         
-        # 将更新后的JSON写回原文件
-        mv "$UPDATED_JSON" "$JSON_FILE"
+        # 清理临时目录
+        rm -rf "$TEMP_DIR"
         
-        # 清理临时文件
-        rm -f download_dir.py
+        # 更新JSON文件的时间戳
+        if [ $SUCCESS_COUNT -gt 0 ] || [ $FAILED_COUNT -gt 0 ]; then
+          CURRENT_DATE=$(date -Iseconds)
+          # 创建临时文件
+          TMP_JSON=$(mktemp)
+          # 更新所有记录的状态和时间
+          jq --arg date "$CURRENT_DATE" \
+             'map(.pulled_at = $date | .status = if (.local_path | (test("^[a-zA-Z0-9_-]+$") and (.[0:1] != "."))) then (if (.["local_path"] | (.[0:1] != ".") and (.[0:1] != "/")) then "updated" else "unknown" end) else "unknown" end)' \
+             "$JSON_FILE" > "$TMP_JSON" && mv "$TMP_JSON" "$JSON_FILE"
+        fi
         
         echo "==========================================="
         echo "✅ 更新完成"
