@@ -103,7 +103,7 @@ jobs:
           mkdir -p "$TEMP_REPO_DIR"
           
           cd "$TEMP_REPO_DIR"
-          git init
+          git init -q
           git remote add origin "https://github.com/$REPO_OWNER/$REPO_NAME.git"
           git config core.sparseCheckout true
           
@@ -164,10 +164,9 @@ jobs:
           CURRENT_DATE=$(date -Iseconds)
           # 创建临时文件
           TMP_JSON=$(mktemp)
-          # 更新所有记录的状态和时间
-          jq --arg date "$CURRENT_DATE" \
-             'map(.pulled_at = $date | .status = if (.local_path | (test("^[a-zA-Z0-9_-]+$") and (.[0:1] != "."))) then (if (.["local_path"] | (.[0:1] != ".") and (.[0:1] != "/")) then "updated" else "unknown" end) else "unknown" end)' \
-             "$JSON_FILE" > "$TMP_JSON" && mv "$TMP_JSON" "$JSON_FILE"
+          # 简化JSON更新，只更新时间戳
+          jq --arg date "$CURRENT_DATE" 'map(.pulled_at = $date)' "$JSON_FILE" > "$TMP_JSON" && mv "$TMP_JSON" "$JSON_FILE"
+          echo "✅ 已更新JSON文件时间戳"
         fi
         
         echo "==========================================="
