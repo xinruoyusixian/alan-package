@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=bandix
-PKG_VERSION:=0.5.2
+PKG_VERSION:=0.7.3
 PKG_RELEASE:=1
 
 PKG_LICENSE:=Apache-2.0
@@ -13,7 +13,7 @@ include $(INCLUDE_DIR)/package.mk
 include $(TOPDIR)/feeds/packages/lang/rust/rust-values.mk
 
 # 二进制文件的文件名和URL
-RUST_BANDIX_VERSION:=0.5.2
+RUST_BANDIX_VERSION:=0.7.3
 RUST_BINARY_FILENAME:=bandix-$(RUST_BANDIX_VERSION)-$(RUSTC_TARGET_ARCH).tar.gz
 
 
@@ -51,6 +51,19 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_BIN) ./files/bandix.init $(1)/etc/init.d/bandix
 	$(INSTALL_CONF) ./files/bandix.config $(1)/etc/config/bandix
+endef
+
+
+define Package/$(PKG_NAME)/postinst
+#!/bin/sh
+if [ -z "$${IPKG_INSTROOT}" ]; then
+    if ! grep -q "^/usr/share/bandix$$" /etc/sysupgrade.conf; then
+        echo "/usr/share/bandix" >> /etc/sysupgrade.conf
+    fi
+    if ! grep -q "^/etc/config/bandix$$" /etc/sysupgrade.conf; then
+        echo "/etc/config/bandix" >> /etc/sysupgrade.conf
+    fi
+fi
 endef
 
 $(eval $(call BuildPackage,bandix)) 
