@@ -11,6 +11,8 @@ LuCI Bandix is a network traffic monitoring application for OpenWrt, providing i
 
 LuCI Bandix is developed based on the LuCI framework, offering network traffic monitoring capabilities for OpenWrt routers. This application depends on the openwrt-bandix backend service and helps users view and analyze network traffic statistics in real-time.
 
+**Note**: This application is primarily designed for home users and simple network environments. It is not recommended for complex network architectures (such as VLAN) or enterprise-level deployments.
+
 
 ![LuCI Bandix Screenshot](docs/images/index-1.png)
 
@@ -23,7 +25,7 @@ LuCI Bandix is developed based on the LuCI framework, offering network traffic m
 
 ## System Requirements
 
-- **OpenWrt Version**: Recommended OpenWrt 24.10 and above
+- **OpenWrt Version**: Recommended OpenWrt 24.10 and above, or Linux kernel 6.x and above
 - **Package Format Support**: Supports APK and IPK package formats
 
 
@@ -38,6 +40,7 @@ LuCI Bandix is developed based on the LuCI framework, offering network traffic m
 - Support for LAN/WAN speed monitoring
 - Support device TCP/UDP connection number monitoring
 - Support for WAN speed limitation
+- Support IPv4/IPv6
 - Persistent data storage
 - Historical traffic trends and charts
 
@@ -46,8 +49,7 @@ LuCI Bandix is developed based on the LuCI framework, offering network traffic m
 
 luci-app-bandix requires the following dependency packages:
 
-- **curl**: HTTP client library for network requests
-- **luci-lib-jsonc**: JSON parsing library for data processing
+`curl` , `luci-lib-jsonc` , `jsonfilter` , `jshn`
 
 These dependencies will be automatically installed when installing luci-app-bandix, but some firmware may require manual installation of these dependency packages.
 
@@ -62,6 +64,8 @@ The following table shows the version dependency relationship between luci-app-b
 | 0.3.x                  | 0.3.x                          |
 | 0.4.x                  | 0.4.x                          |
 | 0.5.x                  | 0.5.x                          |
+| 0.6.x                  | 0.6.x                          |
+| 0.7.x                  | 0.7.x                          |
 
 Please ensure you install matching versions to ensure compatibility and proper functionality.
 

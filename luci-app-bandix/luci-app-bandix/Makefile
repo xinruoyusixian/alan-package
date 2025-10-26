@@ -6,11 +6,11 @@ include $(TOPDIR)/rules.mk
 PKG_LICENSE:=Apache-2.0
 
 LUCI_TITLE:=LuCI Bandix app for network traffic monitoring
-LUCI_DEPENDS:=+luci-base +luci-lib-jsonc +curl +bandix 
+LUCI_DEPENDS:=+luci-base +luci-lib-jsonc +curl +bandix +jsonfilter +jshn
 
 PKG_MAINTAINER:=timsaya
 
-PKG_VERSION:=0.5.1
+PKG_VERSION:=0.7.2
 PKG_RELEASE:=1
 
 include $(TOPDIR)/feeds/luci/luci.mk

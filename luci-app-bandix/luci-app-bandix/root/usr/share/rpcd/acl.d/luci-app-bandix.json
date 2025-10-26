@@ -6,8 +6,13 @@
 				"luci.bandix": [
 					"getStatus",
 					"getMetrics",
+					"getMetricsDay",
+					"getMetricsWeek",
+					"getMetricsMonth",
+					"getMetricsYear",
 					"setRateLimit",
-					"getConnection"
+					"getConnection",
+					"setHostname"
 				]
 			},
 			"uci": [
@@ -20,7 +25,12 @@
 					"setRateLimit",
 					"getStatus",
 					"getMetrics",
-					"getConnection"
+					"getMetricsDay",
+					"getMetricsWeek",
+					"getMetricsMonth",
+					"getMetricsYear",
+					"getConnection",
+					"setHostname"
 				]
 			},
 			"uci": [
