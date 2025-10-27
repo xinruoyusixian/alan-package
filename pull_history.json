@@ -184,5 +184,11 @@
     "local_path": "luci-lib-taskd",
     "pulled_at": "2025-10-27T01:39:56+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "kenzok8/small-package/luci-app-store",
+    "local_path": "luci-app-store",
+    "pulled_at": "2025-10-27T01:40:11+00:00",
+    "status": "success"
   }
 ]
