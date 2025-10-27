@@ -172,5 +172,11 @@
     "local_path": "taskd",
     "pulled_at": "2025-10-27T01:39:10+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "kenzok8/small-package/luci-lib-xterm",
+    "local_path": "luci-lib-xterm",
+    "pulled_at": "2025-10-27T01:39:31+00:00",
+    "status": "success"
   }
 ]
