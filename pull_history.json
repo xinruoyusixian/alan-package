@@ -196,5 +196,11 @@
     "local_path": "luci-app-quickstart",
     "pulled_at": "2025-10-27T01:40:33+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "kenzok8/small-package/luci-app-istorex",
+    "local_path": "luci-app-istorex",
+    "pulled_at": "2025-10-27T01:40:46+00:00",
+    "status": "success"
   }
 ]
