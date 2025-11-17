@@ -59,47 +59,50 @@ jobs:
             repo_url="https://github.com/$repo_owner/$repo_name.git"
             
             echo "🔗 Source repository: $repo_url"
-            echo "📁 Source path: $sub_path"
+            echo "📁 Source path: '$sub_path'"
             
             # 创建临时目录用于克隆源仓库
             temp_dir=$(mktemp -d)
             
             # 克隆源仓库（浅克隆以提高效率）
             echo "⬇️ Cloning source repository..."
-            if git clone --depth 1 --filter=blob:none --sparse "$repo_url" "$temp_dir" 2>/dev/null; then
+            if git clone --depth 1 "$repo_url" "$temp_dir" 2>/dev/null; then
               cd "$temp_dir"
               
-              # 设置稀疏检出到特定路径
-              if git sparse-checkout set "$sub_path" 2>/dev/null; then
+              # 如果sub_path为空，表示要克隆整个仓库
+              if [ -z "$sub_path" ]; then
+                echo "ℹ️ No sub-path specified, using entire repository"
+                source_content="."
+              else
                 # 检查源路径是否存在
                 if [ -d "$sub_path" ] || [ -f "$sub_path" ]; then
                   echo "✅ Source path exists in remote repository"
-                  
-                  # 回到工作目录
-                  cd - > /dev/null
-                  
-                  # 删除本地旧文件
-                  echo "🗑️ Removing old local files..."
-                  rm -rf "$local_path"
-                  
-                  # 创建目标目录
-                  mkdir -p "$(dirname "$local_path")"
-                  
-                  # 复制新文件
-                  echo "🔄 Copying updated files..."
-                  if cp -r "$temp_dir/$sub_path" "$local_path"; then
-                    echo "✅ Successfully updated: $local_path"
-                    updated=true
-                  else
-                    echo "❌ Failed to copy files to: $local_path"
-                  fi
+                  source_content="$sub_path"
                 else
                   echo "❌ Source path not found in remote repository: $sub_path"
                   cd - > /dev/null
+                  rm -rf "$temp_dir"
+                  continue
                 fi
+              fi
+              
+              # 回到工作目录
+              cd - > /dev/null
+              
+              # 删除本地旧文件
+              echo "🗑️ Removing old local files..."
+              rm -rf "$local_path"
+              
+              # 创建目标目录
+              mkdir -p "$(dirname "$local_path")"
+              
+              # 复制新文件
+              echo "🔄 Copying updated files from $source_content..."
+              if cp -r "$temp_dir/$source_content" "$local_path"; then
+                echo "✅ Successfully updated: $local_path"
+                updated=true
               else
-                echo "❌ Failed to set sparse checkout for: $sub_path"
-                cd - > /dev/null
+                echo "❌ Failed to copy files to: $local_path"
               fi
               
               # 清理临时目录
@@ -116,8 +119,7 @@ jobs:
           echo "---"
         done
 
-        # 由于while循环在子shell中运行，我们需要另一种方式检测更新
-        # 使用文件标记来检测是否有更新
+        # 检测并提交更改
         if git diff --quiet; then
           echo "📝 No updates were made"
         else
