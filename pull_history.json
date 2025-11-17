@@ -226,5 +226,11 @@
     "local_path": "luci-app-advancedplus",
     "pulled_at": "2025-11-17T05:45:33+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "sirpdboy/luci-app-partexp",
+    "local_path": "luci-app-partexp",
+    "pulled_at": "2025-11-17T05:46:14+00:00",
+    "status": "success"
   }
 ]
