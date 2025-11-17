@@ -1,194 +1,134 @@
-name: 更新现有代码
+name: Update Packages from History
 
 on:
-  workflow_dispatch:
-    inputs:
-      force_refresh:
-        description: '强制刷新（即使目录存在也重新下载）'
-        required: false
-        type: boolean
-        default: false
+  workflow_dispatch:  # 手动触发
+  schedule:
+    - cron: '0 0 * * *'  # 每天UTC时间0点自动运行
 
 jobs:
-  update-existing-directories:
+  update-packages:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     
     steps:
-    - name: Checkout current repository
+    - name: Checkout repository
       uses: actions/checkout@v4
       with:
+        token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
-        
-    - name: Install dependencies
+
+    - name: Set up Git
       run: |
-        sudo apt-get update
-        sudo apt-get install -y jq curl git
-        
-    - name: Configure Git
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+
+    - name: Read pull history and update packages
       run: |
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git config --global user.name "github-actions[bot]"
-        
-    - name: Pull latest changes
-      run: |
-        git pull origin main
-        
-    - name: Update existing directories with flexible path handling
-      run: |
-        # 禁用错误退出，确保脚本继续执行
-        set +e
-        
-        FORCE_REFRESH="${{ github.event.inputs.force_refresh }}"
-        JSON_FILE="pull_history.json"
-        
-        if [ ! -f "$JSON_FILE" ]; then
-          echo "❌ $JSON_FILE 不存在，没有历史记录可更新"
-          exit 0
-        fi
-        
-        # 检查JSON文件格式
-        if ! jq . "$JSON_FILE" > /dev/null 2>&1; then
-          echo "❌ $JSON_FILE 格式错误"
+        # 检查pull_history.json文件是否存在
+        if [ ! -f "pull_history.json" ]; then
+          echo "❌ pull_history.json not found"
           exit 1
         fi
-        
-        # 读取所有记录
-        RECORD_COUNT=$(jq 'length' "$JSON_FILE")
-        echo "找到 $RECORD_COUNT 条历史记录"
-        
-        # 统计变量
-        SUCCESS_COUNT=0
-        FAILED_COUNT=0
-        NOT_EXIST_COUNT=0
-        
-        # 处理每条记录
-        for i in $(seq 0 $((RECORD_COUNT - 1))); do
-          echo "==========================================="
-          echo "处理项目 $((i + 1))/$RECORD_COUNT"
+
+        # 安装jq用于JSON解析
+        sudo apt-get update && sudo apt-get install -y jq
+
+        # 读取pull_history.json并处理每个包
+        packages=$(jq -c '.[]' pull_history.json)
+        updated=false
+
+        while IFS= read -r package; do
+          # 解析JSON字段
+          target_path=$(echo "$package" | jq -r '.target_path')
+          local_path=$(echo "$package" | jq -r '.local_path')
+          status=$(echo "$package" | jq -r '.status')
           
-          # 提取记录信息
-          TARGET_PATH=$(jq -r ".[$i].target_path" "$JSON_FILE")
-          LOCAL_PATH=$(jq -r ".[$i].local_path" "$JSON_FILE")
-          REPO_OWNER=$(jq -r ".[$i].repo_owner" "$JSON_FILE")
-          REPO_NAME=$(jq -r ".[$i].repo_name" "$JSON_FILE")
-          SUB_PATH=$(jq -r ".[$i].sub_path" "$JSON_FILE")
-          PATH_TYPE=$(jq -r ".[$i].path_type" "$JSON_FILE")
+          echo "📦 Processing: $local_path (from: $target_path)"
           
-          echo "目标路径: $TARGET_PATH"
-          echo "本地路径: $LOCAL_PATH"
-          echo "仓库: $REPO_OWNER/$REPO_NAME"
-          echo "子路径: '$SUB_PATH'"
-          echo "路径类型: $PATH_TYPE"
-          
-          # 检查目录是否存在
-          if [ ! -d "$LOCAL_PATH" ]; then
-            echo "❌ 目录不存在，跳过: $LOCAL_PATH"
-            ((NOT_EXIST_COUNT++))
-            continue
-          fi
-          
-          # 创建临时目录
-          TEMP_DIR=$(mktemp -d)
-          
-          # 使用git clone下载
-          echo "尝试使用git clone下载..."
-          GIT_URL="https://github.com/$REPO_OWNER/$REPO_NAME.git"
-          
-          if git clone --filter=blob:none --no-checkout --depth 1 --quiet "$GIT_URL" "$TEMP_DIR" 2>/dev/null; then
-            cd "$TEMP_DIR"
+          # 检查本地路径是否存在
+          if [ -d "$local_path" ] || [ -f "$local_path" ]; then
+            echo "✅ Local path exists: $local_path"
             
-            # 配置sparse checkout
+            # 从target_path提取仓库信息
+            repo_owner=$(echo "$target_path" | cut -d'/' -f1)
+            repo_name=$(echo "$target_path" | cut -d'/' -f2)
+            sub_path=$(echo "$target_path" | cut -d'/' -f3-)
+            
+            # 构建完整的GitHub仓库URL
+            repo_url="https://github.com/$repo_owner/$repo_name.git"
+            
+            echo "🔗 Source repository: $repo_url"
+            echo "📁 Source path: $sub_path"
+            
+            # 创建临时目录用于克隆源仓库
+            temp_dir=$(mktemp -d)
+            
+            # 克隆源仓库（只克隆最近的一次提交以减少数据量）
+            echo "⬇️ Cloning source repository..."
+            git clone --depth 1 --filter=blob:none --sparse "$repo_url" "$temp_dir"
+            
+            # 进入临时目录并设置稀疏检出
+            cd "$temp_dir"
             git sparse-checkout init --cone
-            if [ -n "$SUB_PATH" ] && [ "$SUB_PATH" != "null" ]; then
-              echo "设置sparse checkout路径: $SUB_PATH"
-              git sparse-checkout set "$SUB_PATH"
+            git sparse-checkout set "$sub_path"
+            
+            # 检查源路径是否存在
+            if [ -d "$sub_path" ] || [ -f "$sub_path" ]; then
+              echo "✅ Source path exists in remote repository"
+              
+              # 复制文件到本地路径
+              echo "🔄 Updating local package..."
+              rm -rf "../../$local_path"
+              cp -r "$sub_path" "../../$local_path"
+              
+              # 设置更新标志
+              updated=true
+              echo "✅ Successfully updated: $local_path"
             else
-              echo "拉取整个仓库"
-              git sparse-checkout set "/*"
+              echo "❌ Source path not found in remote repository: $sub_path"
             fi
             
-            # 检出文件
-            if git checkout --quiet; then
-              echo "✅ Git下载成功"
-              
-              # 强制刷新：删除目录内容
-              if [ "$FORCE_REFRESH" = "true" ]; then
-                echo "强制刷新目录: $LOCAL_PATH"
-                rm -rf "$LOCAL_PATH"/*
-              fi
-              
-              # 根据路径类型复制文件
-              if [ -n "$SUB_PATH" ] && [ "$SUB_PATH" != "null" ] && [ -d "$TEMP_DIR/$SUB_PATH" ]; then
-                # 有子路径的情况
-                echo "复制子目录内容: $SUB_PATH -> $LOCAL_PATH"
-                cp -r "$TEMP_DIR/$SUB_PATH"/* "$LOCAL_PATH"/ 2>/dev/null || true
-                echo "✅ 成功更新目录: $LOCAL_PATH"
-                ((SUCCESS_COUNT++))
-              elif [ -d "$TEMP_DIR" ]; then
-                # 整个仓库的情况
-                echo "复制整个仓库内容 -> $LOCAL_PATH"
-                # 排除.git目录
-                find "$TEMP_DIR" -maxdepth 1 -name ".git" -prune -o -type f -print -o -type d -print | \
-                  while read item; do
-                    if [ "$item" != "$TEMP_DIR/.git" ] && [ "$item" != "$TEMP_DIR" ]; then
-                      cp -r "$item" "$LOCAL_PATH"/ 2>/dev/null || true
-                    fi
-                  done
-                echo "✅ 成功更新目录: $LOCAL_PATH"
-                ((SUCCESS_COUNT++))
-              else
-                echo "❌ 无法找到下载的内容"
-                ((FAILED_COUNT++))
-              fi
-            else
-              echo "❌ Git检出失败"
-              ((FAILED_COUNT++))
-            fi
+            # 清理临时目录
+            cd ../..
+            rm -rf "$temp_dir"
             
-            cd - > /dev/null
           else
-            echo "❌ Git克隆失败"
-            ((FAILED_COUNT++))
+            echo "⚠️ Local path does not exist, skipping: $local_path"
           fi
           
-          # 清理临时目录
-          rm -rf "$TEMP_DIR"
-        done
-        
-        # 更新JSON文件的时间戳
-        if [ $SUCCESS_COUNT -gt 0 ] || [ $FAILED_COUNT -gt 0 ]; then
-          CURRENT_DATE=$(date -Iseconds)
-          TMP_JSON=$(mktemp)
-          jq --arg date "$CURRENT_DATE" 'map(.pulled_at = $date)' "$JSON_FILE" > "$TMP_JSON" && mv "$TMP_JSON" "$JSON_FILE"
-          echo "✅ 已更新JSON文件时间戳"
-        fi
-        
-        echo "==========================================="
-        echo "✅ 更新完成"
-        
-        # 显示摘要
-        echo "更新摘要:"
-        echo "  ✅ 成功: $SUCCESS_COUNT"
-        echo "  ❌ 失败: $FAILED_COUNT"
-        echo "  📁 不存在(跳过): $NOT_EXIST_COUNT"
-        
-        # 如果有失败的项目，非零退出
-        if [ "$FAILED_COUNT" -gt 0 ]; then
-          echo "警告: $FAILED_COUNT 个项目更新失败"
-          exit 1
-        fi
-        
-    - name: Commit and push changes
-      run: |
-        git pull origin main --no-rebase
-        git add .
-        
-        if git diff --staged --quiet; then
-          echo "没有更改需要提交"
+          echo "---"
+          
+        done <<< "$packages"
+
+        # 如果有更新，提交更改
+        if [ "$updated" = true ]; then
+          echo "🚀 Committing updates..."
+          git add .
+          git commit -m "chore: update packages from pull history [skip ci]"
+          git push
+          echo "✅ Updates pushed to repository"
         else
-          git commit -m "Auto-update: 更新现有项目 [$(date +%Y-%m-%d)]"
-          git push origin main
-          echo "更改已提交并推送"
+          echo "📝 No updates were made"
+        fi
+
+    - name: Update pull history timestamp
+      if: always()
+      run: |
+        # 更新pull_history.json中的时间戳（仅对成功处理的包）
+        if [ -f "pull_history.json" ]; then
+          current_time=$(date -Iseconds)
+          jq --arg time "$current_time" '
+            map(
+              if .status == "success" then
+                .pulled_at = $time
+              else
+                .
+              end
+            )
+          ' pull_history.json > pull_history_updated.json
+          
+          mv pull_history_updated.json pull_history.json
+          
+          git add pull_history.json
+          git commit -m "chore: update pull history timestamps [skip ci]" || echo "No changes to pull history"
+          git push || echo "No changes to push"
         fi
