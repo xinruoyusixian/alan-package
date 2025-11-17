@@ -21,7 +21,12 @@ jobs:
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
 
-    - name: Read pull history and update packages
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+
+    - name: Update packages from pull history
       run: |
         # 检查pull_history.json文件是否存在
         if [ ! -f "pull_history.json" ]; then
@@ -29,14 +34,11 @@ jobs:
           exit 1
         fi
 
-        # 安装jq用于JSON解析
-        sudo apt-get update && sudo apt-get install -y jq
-
-        # 读取pull_history.json并处理每个包
-        packages=$(jq -c '.[]' pull_history.json)
+        echo "📖 Reading pull history..."
         updated=false
 
-        while IFS= read -r package; do
+        # 使用jq解析JSON并循环处理每个包
+        jq -c '.[]' pull_history.json | while IFS= read -r package; do
           # 解析JSON字段
           target_path=$(echo "$package" | jq -r '.target_path')
           local_path=$(echo "$package" | jq -r '.local_path')
@@ -62,58 +64,77 @@ jobs:
             # 创建临时目录用于克隆源仓库
             temp_dir=$(mktemp -d)
             
-            # 克隆源仓库（只克隆最近的一次提交以减少数据量）
+            # 克隆源仓库（浅克隆以提高效率）
             echo "⬇️ Cloning source repository..."
-            git clone --depth 1 --filter=blob:none --sparse "$repo_url" "$temp_dir"
-            
-            # 进入临时目录并设置稀疏检出
-            cd "$temp_dir"
-            git sparse-checkout init --cone
-            git sparse-checkout set "$sub_path"
-            
-            # 检查源路径是否存在
-            if [ -d "$sub_path" ] || [ -f "$sub_path" ]; then
-              echo "✅ Source path exists in remote repository"
+            if git clone --depth 1 --filter=blob:none --sparse "$repo_url" "$temp_dir" 2>/dev/null; then
+              cd "$temp_dir"
               
-              # 复制文件到本地路径
-              echo "🔄 Updating local package..."
-              rm -rf "../../$local_path"
-              cp -r "$sub_path" "../../$local_path"
+              # 设置稀疏检出到特定路径
+              if git sparse-checkout set "$sub_path" 2>/dev/null; then
+                # 检查源路径是否存在
+                if [ -d "$sub_path" ] || [ -f "$sub_path" ]; then
+                  echo "✅ Source path exists in remote repository"
+                  
+                  # 回到工作目录
+                  cd - > /dev/null
+                  
+                  # 删除本地旧文件
+                  echo "🗑️ Removing old local files..."
+                  rm -rf "$local_path"
+                  
+                  # 创建目标目录
+                  mkdir -p "$(dirname "$local_path")"
+                  
+                  # 复制新文件
+                  echo "🔄 Copying updated files..."
+                  if cp -r "$temp_dir/$sub_path" "$local_path"; then
+                    echo "✅ Successfully updated: $local_path"
+                    updated=true
+                  else
+                    echo "❌ Failed to copy files to: $local_path"
+                  fi
+                else
+                  echo "❌ Source path not found in remote repository: $sub_path"
+                  cd - > /dev/null
+                fi
+              else
+                echo "❌ Failed to set sparse checkout for: $sub_path"
+                cd - > /dev/null
+              fi
               
-              # 设置更新标志
-              updated=true
-              echo "✅ Successfully updated: $local_path"
+              # 清理临时目录
+              rm -rf "$temp_dir"
             else
-              echo "❌ Source path not found in remote repository: $sub_path"
+              echo "❌ Failed to clone repository: $repo_url"
+              rm -rf "$temp_dir"
             fi
-            
-            # 清理临时目录
-            cd ../..
-            rm -rf "$temp_dir"
             
           else
             echo "⚠️ Local path does not exist, skipping: $local_path"
           fi
           
           echo "---"
-          
-        done <<< "$packages"
+        done
 
-        # 如果有更新，提交更改
-        if [ "$updated" = true ]; then
-          echo "🚀 Committing updates..."
+        # 由于while循环在子shell中运行，我们需要另一种方式检测更新
+        # 使用文件标记来检测是否有更新
+        if git diff --quiet; then
+          echo "📝 No updates were made"
+        else
+          echo "🚀 Changes detected, committing updates..."
           git add .
-          git commit -m "chore: update packages from pull history [skip ci]"
+          git commit -m "chore: update packages from pull history
+
+          - Auto-update based on pull_history.json
+          - Updated at: $(date -Iseconds)"
           git push
           echo "✅ Updates pushed to repository"
-        else
-          echo "📝 No updates were made"
         fi
 
     - name: Update pull history timestamp
       if: always()
       run: |
-        # 更新pull_history.json中的时间戳（仅对成功处理的包）
+        # 更新pull_history.json中的时间戳
         if [ -f "pull_history.json" ]; then
           current_time=$(date -Iseconds)
           jq --arg time "$current_time" '
@@ -126,9 +147,14 @@ jobs:
             )
           ' pull_history.json > pull_history_updated.json
           
-          mv pull_history_updated.json pull_history.json
-          
-          git add pull_history.json
-          git commit -m "chore: update pull history timestamps [skip ci]" || echo "No changes to pull history"
-          git push || echo "No changes to push"
+          # 检查是否有实际更改
+          if ! cmp -s pull_history.json pull_history_updated.json; then
+            mv pull_history_updated.json pull_history.json
+            git add pull_history.json
+            git commit -m "chore: update pull history timestamps [skip ci]" || echo "No changes to pull history"
+            git push || echo "No changes to push"
+          else
+            rm pull_history_updated.json
+            echo "📝 No timestamp updates needed"
+          fi
         fi
