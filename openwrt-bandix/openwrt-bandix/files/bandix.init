@@ -16,64 +16,61 @@ start_service() {
 	local iface
 	local port
 	local data_dir
+	local log_level
 	local traffic_enabled
+	local traffic_retention_seconds
 	local traffic_flush_interval_seconds
-	local traffic_persist_main_ring
-	local traffic_main_ring_retention_seconds
-	local traffic_persist_day_ring
-	local traffic_persist_week_ring
-	local traffic_persist_month_ring
-	local traffic_persist_year_ring
+	local traffic_persist_history
 	local connections_enabled
+	local dns_enabled
+	local dns_max_records
 	
 	config_load 'bandix'
 	config_get iface 'general' 'iface'
 	config_get port 'general' 'port'
 	config_get data_dir 'general' 'data_dir'
+	config_get log_level 'general' 'log_level'
 	config_get_bool traffic_enabled 'traffic' 'enabled'
+	config_get traffic_retention_seconds 'traffic' 'traffic_retention_seconds'
 	config_get traffic_flush_interval_seconds 'traffic' 'traffic_flush_interval_seconds'
-	config_get_bool traffic_persist_main_ring 'traffic' 'traffic_persist_main_ring'
-	config_get traffic_main_ring_retention_seconds 'traffic' 'traffic_main_ring_retention_seconds'
-	config_get_bool traffic_persist_day_ring 'traffic' 'traffic_persist_day_ring'
-	config_get_bool traffic_persist_week_ring 'traffic' 'traffic_persist_week_ring'
-	config_get_bool traffic_persist_month_ring 'traffic' 'traffic_persist_month_ring'
-	config_get_bool traffic_persist_year_ring 'traffic' 'traffic_persist_year_ring'
+	config_get_bool traffic_persist_history 'traffic' 'traffic_persist_history'
 	config_get_bool connections_enabled 'connections' 'enabled'
+	config_get_bool dns_enabled 'dns' 'enabled'
+	config_get dns_max_records 'dns' 'dns_max_records'
 
-	[ "$connections_enabled" != 1 ] && [ "$traffic_enabled" != 1 ] && return 1
+	[ "$connections_enabled" != 1 ] && [ "$traffic_enabled" != 1 ] && [ "$dns_enabled" != 1 ] && return 1
 	
 	# 构建基础命令行参数
 	local args="--iface $iface --port $port --data-dir $data_dir"
+	if [ -n "$log_level" ]; then
+		args="$args --log-level $log_level"
+	fi
 	
 	# 添加流量监控相关参数
 	if [ "$traffic_enabled" -eq 1 ]; then
 		args="$args --enable-traffic"
 	fi
+	if [ -n "$traffic_retention_seconds" ]; then
+		args="$args --traffic-retention-seconds $traffic_retention_seconds"
+	fi
 	if [ -n "$traffic_flush_interval_seconds" ]; then
 		args="$args --traffic-flush-interval-seconds $traffic_flush_interval_seconds"
 	fi
-	if [ "$traffic_persist_main_ring" -eq 1 ]; then
-		args="$args --traffic-persist-main-ring"
-	fi
-	if [ -n "$traffic_main_ring_retention_seconds" ]; then
-		args="$args --traffic-main-ring-retention-seconds $traffic_main_ring_retention_seconds"
-	fi
-	if [ "$traffic_persist_day_ring" -eq 1 ]; then
-		args="$args --traffic-persist-day-ring"
-	fi
-	if [ "$traffic_persist_week_ring" -eq 1 ]; then
-		args="$args --traffic-persist-week-ring"
-	fi
-	if [ "$traffic_persist_month_ring" -eq 1 ]; then
-		args="$args --traffic-persist-month-ring"
-	fi
-	if [ "$traffic_persist_year_ring" -eq 1 ]; then
-		args="$args --traffic-persist-year-ring"
+	if [ "$traffic_persist_history" -eq 1 ]; then
+		args="$args --traffic-persist-history"
 	fi
 	
 	# 添加连接统计监控参数
 	if [ "$connections_enabled" -eq 1 ]; then
 		args="$args --enable-connection"
+	fi
+	
+	# 添加 DNS 监控参数
+	if [ "$dns_enabled" -eq 1 ]; then
+		args="$args --enable-dns"
+	fi
+	if [ -n "$dns_max_records" ]; then
+		args="$args --dns-max-records $dns_max_records"
 	fi
 	
 	procd_open_instance bandix
