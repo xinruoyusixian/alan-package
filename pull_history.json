@@ -220,5 +220,11 @@
     "local_path": "luci-app-syscontrol",
     "pulled_at": "2025-11-17T05:43:58+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "sirpdboy/luci-app-advancedplus",
+    "local_path": "luci-app-advancedplus",
+    "pulled_at": "2025-11-17T05:45:33+00:00",
+    "status": "success"
   }
 ]
