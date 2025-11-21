@@ -6,12 +6,6 @@ include $(TOPDIR)/rules.mk
 LUCI_NAME:=luci-lib-dummy
 INCLUDE_DIR:=./dummy
 
-define Package/luci-app-store/install
-	$(INSTALL_DIR) $(1)/usr/lib/luci-app-store
-	$(CP) ./root/* $(1)/
-	chmod 0755 $(1)/bin/is-opkg      # 就是这一行
-endef
-
 include $(TOPDIR)/feeds/luci/luci.mk
 
 install:
