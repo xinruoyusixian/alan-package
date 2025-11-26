@@ -133,13 +133,6 @@ var callStatus = rpc.declare({
     expect: {}
 });
 
-var callSetRateLimit = rpc.declare({
-    object: 'luci.bandix',
-    method: 'setRateLimit',
-    params: ['mac', 'wide_tx_rate_limit', 'wide_rx_rate_limit'],
-    expect: { success: true }
-});
-
 var callSetHostname = rpc.declare({
     object: 'luci.bandix',
     method: 'setHostname',
@@ -153,6 +146,27 @@ var callGetMetrics = rpc.declare({
     method: 'getMetrics',
     params: ['mac'],
     expect: {}
+});
+
+// 定时限速 RPC
+var callGetScheduleLimits = rpc.declare({
+    object: 'luci.bandix',
+    method: 'getScheduleLimits',
+    expect: {}
+});
+
+var callSetScheduleLimit = rpc.declare({
+    object: 'luci.bandix',
+    method: 'setScheduleLimit',
+    params: ['mac', 'start_time', 'end_time', 'days', 'wide_tx_rate_limit', 'wide_rx_rate_limit'],
+    expect: { success: true }
+});
+
+var callDeleteScheduleLimit = rpc.declare({
+    object: 'luci.bandix',
+    method: 'deleteScheduleLimit',
+    params: ['mac', 'start_time', 'end_time', 'days'],
+    expect: { success: true }
 });
 
 return view.extend({
@@ -361,7 +375,7 @@ return view.extend({
             
             .bandix-table th:nth-child(1),
             .bandix-table td:nth-child(1) {
-                width: 25%;
+                width: 27%;
             }
             
             .bandix-table th:nth-child(2),
@@ -376,12 +390,18 @@ return view.extend({
             
             .bandix-table th:nth-child(4),
             .bandix-table td:nth-child(4) {
-                width: 15%;
+                width: 12.5%;
             }
             
             .bandix-table th:nth-child(5),
             .bandix-table td:nth-child(5) {
-                width: 9%;
+                width: 16.5%;
+            }
+            
+            .schedule-rules-info {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
             }
 
 			/* 类型联动的高亮与弱化 */
@@ -720,6 +740,206 @@ return view.extend({
                 outline: none;
             }
             
+            /* Tab 切换样式 */
+            .modal-tabs {
+                display: flex;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+                margin-bottom: 20px;
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .modal-tabs {
+                    border-bottom-color: rgba(255, 255, 255, 0.15);
+                }
+            }
+            
+            .modal-tab {
+                flex: 1;
+                padding: 12px 16px;
+                text-align: center;
+                cursor: pointer;
+                border: none;
+                background: transparent;
+                font-size: 0.875rem;
+                font-weight: 500;
+                color: rgba(0, 0, 0, 0.6);
+                transition: all 0.2s ease;
+                border-bottom: 2px solid transparent;
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .modal-tab {
+                    color: rgba(255, 255, 255, 0.6);
+                }
+            }
+            
+            .modal-tab:hover {
+                color: rgba(0, 0, 0, 0.8);
+                background-color: rgba(0, 0, 0, 0.02);
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .modal-tab:hover {
+                    color: rgba(255, 255, 255, 0.8);
+                    background-color: rgba(255, 255, 255, 0.05);
+                }
+            }
+            
+            .modal-tab.active {
+                color: #3b82f6;
+                border-bottom-color: #3b82f6;
+                font-weight: 600;
+            }
+            
+            .modal-tab-content {
+                display: none;
+            }
+            
+            .modal-tab-content.active {
+                display: block;
+            }
+            
+            .schedule-time-row {
+                display: flex;
+                gap: 12px;
+                align-items: center;
+                margin-bottom: 16px;
+            }
+            
+            .schedule-time-input {
+                flex: 1;
+                border-radius: 4px;
+                padding: 8px 12px;
+                font-size: 0.875rem;
+                transition: border-color 0.15s ease;
+                box-sizing: border-box;
+            }
+            
+            .schedule-days {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-bottom: 16px;
+            }
+            
+            .schedule-day-btn {
+                flex: 1;
+                min-width: 40px;
+                padding: 6px 8px;
+                border-radius: 4px;
+                border: 1px solid rgba(0, 0, 0, 0.2);
+                background: transparent;
+                cursor: pointer;
+                font-size: 0.75rem;
+                transition: all 0.15s ease;
+                text-align: center;
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .schedule-day-btn {
+                    border-color: rgba(255, 255, 255, 0.2);
+                }
+            }
+            
+            .schedule-day-btn:hover {
+                background-color: rgba(0, 0, 0, 0.05);
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .schedule-day-btn:hover {
+                    background-color: rgba(255, 255, 255, 0.05);
+                }
+            }
+            
+            .schedule-day-btn.active {
+                background-color: #3b82f6;
+                color: white;
+                border-color: #3b82f6;
+            }
+            
+            .schedule-rules-list {
+                min-height: 200px;
+                max-height: 400px;
+                overflow-y: auto;
+                border: 1px dashed rgba(0, 0, 0, 0.2);
+                border-radius: 4px;
+                padding: 16px;
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .schedule-rules-list {
+                    border-color: rgba(255, 255, 255, 0.2);
+                }
+            }
+            
+            .schedule-rules-empty {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 200px;
+                text-align: center;
+                color: rgba(0, 0, 0, 0.5);
+                font-size: 0.875rem;
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .schedule-rules-empty {
+                    color: rgba(255, 255, 255, 0.5);
+                }
+            }
+            
+            .schedule-rule-item {
+                padding: 12px;
+                border: 1px solid rgba(0, 0, 0, 0.1);
+                border-radius: 4px;
+                margin-bottom: 8px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .schedule-rule-item {
+                    border-color: rgba(255, 255, 255, 0.15);
+                }
+            }
+            
+            .schedule-rule-info {
+                flex: 1;
+            }
+            
+            .schedule-rule-time {
+                font-weight: 600;
+                margin-bottom: 4px;
+            }
+            
+            .schedule-rule-days {
+                font-size: 0.75rem;
+                opacity: 0.7;
+                margin-bottom: 4px;
+            }
+            
+            .schedule-rule-limits {
+                font-size: 0.75rem;
+                opacity: 0.7;
+            }
+            
+            .schedule-rule-delete {
+                padding: 6px 12px;
+                font-size: 0.75rem;
+                cursor: pointer;
+                border-radius: 4px;
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                background-color: rgba(239, 68, 68, 0.1);
+                color: #ef4444;
+                transition: all 0.15s ease;
+            }
+            
+            .schedule-rule-delete:hover {
+                background-color: rgba(239, 68, 68, 0.2);
+            }
+            
             .device-summary {
                 border-radius: 4px;
                 padding: 12px;
@@ -755,6 +975,41 @@ return view.extend({
             .btn-loading {
                 opacity: 0.7;
                 pointer-events: none;
+            }
+
+            /* 确认对话框 */
+            .confirm-dialog {
+                max-width: 400px;
+                width: 90%;
+            }
+            
+            .confirm-dialog .modal-body {
+                padding: 24px;
+            }
+            
+            .confirm-dialog-title {
+                font-size: 1.125rem;
+                font-weight: 600;
+                margin-bottom: 12px;
+            }
+            
+            .confirm-dialog-message {
+                font-size: 0.875rem;
+                line-height: 1.5;
+                color: rgba(0, 0, 0, 0.7);
+                margin-bottom: 20px;
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .confirm-dialog-message {
+                    color: rgba(255, 255, 255, 0.7);
+                }
+            }
+            
+            .confirm-dialog-footer {
+                display: flex;
+                gap: 10px;
+                justify-content: flex-end;
             }
 
             /* 历史趋势 */
@@ -971,45 +1226,80 @@ return view.extend({
                     font-size: 0.875rem;
                 }
                 
-                .device-card-expandable {
-                    display: none;
+                /* LAN流量样式（移动端直接显示） */
+                .device-card-lan {
                     margin-top: 12px;
                     padding-top: 12px;
                     border-top: 1px solid rgba(0, 0, 0, 0.1);
                 }
                 
                 @media (prefers-color-scheme: dark) {
-                    .device-card-expandable {
+                    .device-card-lan {
                         border-top-color: rgba(255, 255, 255, 0.15);
                     }
                 }
                 
-                .device-card.expanded .device-card-expandable {
-                    display: block;
-                }
-                
-                .device-card-toggle {
-                    width: 100%;
-                    margin-top: 8px;
-                    padding: 6px;
-                    font-size: 0.75rem;
-                    text-align: center;
-                    background: transparent;
-                    border: 1px solid rgba(0, 0, 0, 0.1);
-                    border-radius: 4px;
-                    cursor: pointer;
-                    opacity: 0.7;
-                    transition: opacity 0.2s;
+                /* 规则显示样式 */
+                .device-card-rules {
+                    margin-top: 12px;
+                    padding-top: 12px;
+                    border-top: 1px solid rgba(0, 0, 0, 0.1);
                 }
                 
                 @media (prefers-color-scheme: dark) {
-                    .device-card-toggle {
-                        border-color: rgba(255, 255, 255, 0.15);
+                    .device-card-rules {
+                        border-top-color: rgba(255, 255, 255, 0.15);
                     }
                 }
                 
-                .device-card-toggle:hover {
-                    opacity: 1;
+                .device-card-rules-content {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                    padding: 8px 0;
+                }
+                
+                .device-card-rules-empty {
+                    font-size: 0.75rem;
+                    opacity: 0.6;
+                    padding: 4px 0;
+                }
+                
+                .device-card-rules-count {
+                    font-size: 0.8125rem;
+                    font-weight: 600;
+                    color: inherit;
+                    margin-bottom: 2px;
+                }
+                
+                .device-card-rules-active-time {
+                    font-size: 0.8125rem;
+                    color: #10b981;
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    line-height: 1.4;
+                }
+                
+                .device-card-rules-limits {
+                    font-size: 0.75rem;
+                    opacity: 0.8;
+                    margin-top: 2px;
+                    word-break: break-word;
+                }
+                
+                .device-card-rules-more {
+                    font-size: 0.7rem;
+                    opacity: 0.6;
+                    margin-top: 2px;
+                }
+                
+                .device-card-rules-inactive {
+                    font-size: 0.8125rem;
+                    opacity: 0.5;
+                    margin-top: 4px;
                 }
             }
             
@@ -1062,6 +1352,82 @@ return view.extend({
 			.history-tooltip .ht-kpi.up .ht-k-value { color: #f97316; }
 			.history-tooltip .ht-divider { height: 1px; background-color: currentColor; opacity: 0.3; margin: 8px 0; }
 			.history-tooltip .ht-section-title { font-weight: 600; font-size: 0.75rem; opacity: 0.7; margin: 4px 0 6px 0; }
+			
+			/* Schedule Rules Tooltip */
+			.schedule-rules-tooltip {
+				position: fixed;
+				display: none;
+				width: 360px;
+				max-width: 90vw;
+				box-sizing: border-box;
+				padding: 12px;
+				z-index: 10000;
+				pointer-events: none;
+				font-size: 0.8125rem;
+				line-height: 1.5;
+				background-color: rgba(255, 255, 255, 0.98);
+				border: 1px solid rgba(0, 0, 0, 0.1);
+				border-radius: 6px;
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+				color: #1f2937;
+			}
+			
+			@media (prefers-color-scheme: dark) {
+				.schedule-rules-tooltip {
+					background-color: rgba(30, 30, 30, 0.98);
+					border-color: rgba(255, 255, 255, 0.2);
+					box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+					color: #e5e7eb;
+				}
+			}
+			
+			.schedule-rules-tooltip .srt-title {
+				font-weight: 700;
+				margin-bottom: 8px;
+				font-size: 0.875rem;
+			}
+			
+			.schedule-rules-tooltip .srt-rule-item {
+				padding: 8px 0;
+				border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+			}
+			
+			@media (prefers-color-scheme: dark) {
+				.schedule-rules-tooltip .srt-rule-item {
+					border-bottom-color: rgba(255, 255, 255, 0.15);
+				}
+			}
+			
+			.schedule-rules-tooltip .srt-rule-item:last-child {
+				border-bottom: none;
+			}
+			
+			.schedule-rules-tooltip .srt-rule-time {
+				font-weight: 600;
+				margin-bottom: 4px;
+				font-size: 0.75rem;
+			}
+			
+			.schedule-rules-tooltip .srt-rule-days {
+				font-size: 0.75rem;
+				font-weight: 500;
+				opacity: 0.7;
+				margin-bottom: 4px;
+			}
+			
+			.schedule-rules-tooltip .srt-rule-limits {
+				font-size: 0.875rem;
+				font-weight: 600;
+				opacity: 0.8;
+			}
+			
+			.schedule-rules-tooltip .srt-rule-limits .srt-arrow {
+				font-size: 0.75rem;
+				font-weight: bold;
+			}
+			
+			.schedule-rules-info {
+			}
         `);
 
         document.head.appendChild(style);
@@ -1154,6 +1520,59 @@ return view.extend({
             ])
         ]);
 
+        // 创建全局的 Schedule Rules Tooltip 元素
+        var scheduleRulesTooltip = E('div', { 'class': 'schedule-rules-tooltip', 'id': 'schedule-rules-tooltip' });
+        document.body.appendChild(scheduleRulesTooltip);
+        
+        // 构建规则列表的 HTML（用于 tooltip）
+        function buildScheduleRulesTooltipHtml(allRules, activeRules, speedUnit) {
+            if (!allRules || allRules.length === 0) {
+                return '';
+            }
+            
+            var lines = [];
+            lines.push('<div class="srt-title">' + _('Schedule Rules') + ' (' + allRules.length + ')</div>');
+            
+            allRules.forEach(function(rule, index) {
+                var startTime = rule.time_slot && rule.time_slot.start ? rule.time_slot.start : '';
+                var endTime = rule.time_slot && rule.time_slot.end ? rule.time_slot.end : '';
+                var days = rule.time_slot && rule.time_slot.days ? rule.time_slot.days : [];
+                
+                var dayNames = {
+                    1: _('Mon'),
+                    2: _('Tue'),
+                    3: _('Wed'),
+                    4: _('Thu'),
+                    5: _('Fri'),
+                    6: _('Sat'),
+                    7: _('Sun')
+                };
+                var daysText = days.length > 0 ? days.map(function(d) { return dayNames[d] || d; }).join(', ') : '-';
+                
+                var uploadLimit = rule.wide_tx_rate_limit || 0;
+                var downloadLimit = rule.wide_rx_rate_limit || 0;
+                
+                // 使用 isRuleActive 函数检查规则是否激活
+                var isActive = isRuleActive(rule);
+                
+                // 箭头固定颜色（橙色和青色），样式与 WAN 字段一致
+                var uploadLimitText = '<span class="srt-arrow" style="color: #f97316;">↑</span>' + (uploadLimit > 0 ? formatByterate(uploadLimit, speedUnit) : _('Unlimited'));
+                var downloadLimitText = '<span class="srt-arrow" style="color: #06b6d4;">↓</span>' + (downloadLimit > 0 ? formatByterate(downloadLimit, speedUnit) : _('Unlimited'));
+                
+                var activeMark = isActive ? '<span style="color: #10b981; margin-right: 4px;">●</span>' : '';
+                
+                lines.push(
+                    '<div class="srt-rule-item">' +
+                        '<div class="srt-rule-time">' + activeMark + startTime + ' - ' + endTime + '</div>' +
+                        '<div class="srt-rule-days">' + daysText + '</div>' +
+                        '<div class="srt-rule-limits">' + uploadLimitText + ' ' + downloadLimitText + '</div>' +
+                    '</div>'
+                );
+            });
+            
+            return lines.join('');
+        }
+        
         // 设备信息模式切换
         var deviceModeButtons = view.querySelectorAll('.device-mode-btn');
         
@@ -1183,41 +1602,401 @@ return view.extend({
         // 创建限速设置模态框
         var modal = E('div', { 'class': 'modal-overlay', 'id': 'rate-limit-modal' }, [
             E('div', { 'class': 'modal' }, [
-                E('div', { 'class': 'modal-header' }, [
-                    E('h3', { 'class': 'modal-title' }, _('Device Settings'))
-                ]),
+                // E('div', { 'class': 'modal-header' }, [
+                //     E('h3', { 'class': 'modal-title' }, _('Device Settings'))
+                // ]),
                 E('div', { 'class': 'modal-body' }, [
                     E('div', { 'class': 'device-summary', 'id': 'modal-device-summary' }),
                     E('div', { 'class': 'form-group' }, [
                         E('label', { 'class': 'form-label' }, _('Hostname')),
-                        E('input', { 'type': 'text', 'class': 'form-input', 'id': 'device-hostname-input', 'placeholder': _('Please enter hostname') }),
+                        E('div', { 'style': 'display: flex; gap: 8px; align-items: center;' }, [
+                            E('input', { 'type': 'text', 'class': 'form-input', 'id': 'device-hostname-input', 'placeholder': _('Please enter hostname'), 'style': 'flex: 1;' }),
+                            E('button', { 'class': 'cbi-button cbi-button-positive', 'id': 'hostname-save-btn', 'style': 'flex-shrink: 0;' }, _('Save'))
+                        ]),
                         E('div', { 'style': 'font-size: 0.75rem; color: #6b7280; margin-top: 4px;' }, _('Set Hostname'))
                     ]),
-                    E('div', { 'class': 'form-group' }, [
-                        E('label', { 'class': 'form-label' }, _('Upload Limit')),
-                        E('div', { 'style': 'display: flex; gap: 8px;' }, [
-                            E('input', { 'type': 'number', 'class': 'form-input', 'id': 'upload-limit-value', 'min': '0', 'step': '1', 'placeholder': '0' }),
-                            E('select', { 'class': 'cbi-select', 'id': 'upload-limit-unit', 'style': 'width: 100px;' })
+                    // 定时限速
+                    E('div', { 'id': 'schedule-limit-tab' }, [
+                        // 描述和添加规则按钮
+                        E('div', { 'style': 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;' }, [
+                            E('span', { 'style': 'font-size: 0.875rem; opacity: 0.7;' }, _('Set rate limit rules for different time periods')),
+                            E('button', { 
+                                'type': 'button',
+                                'class': 'cbi-button cbi-button-action',
+                                'id': 'schedule-add-rule-btn',
+                                'style': 'display: flex; align-items: center; gap: 4px;'
+                            }, [
+                                E('span', {}, '+'),
+                                _('Add Rule')
+                            ])
                         ]),
-                        E('div', { 'style': 'font-size: 0.75rem; color: #6b7280; margin-top: 4px;' }, _('Tip: Enter 0 for unlimited'))
-                    ]),
-                    E('div', { 'class': 'form-group' }, [
-                        E('label', { 'class': 'form-label' }, _('Download Limit')),
-                        E('div', { 'style': 'display: flex; gap: 8px;' }, [
-                            E('input', { 'type': 'number', 'class': 'form-input', 'id': 'download-limit-value', 'min': '0', 'step': '1', 'placeholder': '0' }),
-                            E('select', { 'class': 'cbi-select', 'id': 'download-limit-unit', 'style': 'width: 100px;' })
-                        ]),
-                        E('div', { 'style': 'font-size: 0.75rem; color: #6b7280; margin-top: 4px;' }, _('Tip: Enter 0 for unlimited'))
+                        // 规则列表区域
+                        E('div', { 'class': 'schedule-rules-list', 'id': 'schedule-rules-list' })
                     ])
                 ]),
                 E('div', { 'class': 'modal-footer' }, [
-                    E('button', { 'class': 'cbi-button cbi-button-reset', 'id': 'modal-cancel' }, _('Cancel')),
-                    E('button', { 'class': 'cbi-button cbi-button-positive', 'id': 'modal-save' }, _('Save'))
+                    E('button', { 'class': 'cbi-button cbi-button-reset', 'id': 'modal-close' }, _('Close'))
                 ])
             ])
         ]);
 
         document.body.appendChild(modal);
+
+        // 创建添加规则模态框
+        var addRuleModal = E('div', { 'class': 'modal-overlay', 'id': 'add-rule-modal' }, [
+            E('div', { 'class': 'modal' }, [
+                E('div', { 'class': 'modal-header' }, [
+                    E('h3', { 'class': 'modal-title' }, _('Add Schedule Rule'))
+                ]),
+                E('div', { 'class': 'modal-body' }, [
+                    E('div', { 'class': 'form-group' }, [
+                        E('label', { 'class': 'form-label' }, _('Time Slot')),
+                        E('div', { 'class': 'schedule-time-row' }, [
+                            E('input', { 'type': 'time', 'class': 'schedule-time-input', 'id': 'add-rule-start-time' }),
+                            E('span', {}, ' - '),
+                            E('input', { 'type': 'time', 'class': 'schedule-time-input', 'id': 'add-rule-end-time' })
+                        ])
+                    ]),
+                    E('div', { 'class': 'form-group' }, [
+                        E('label', { 'class': 'form-label' }, _('Days of Week')),
+                        E('div', { 'class': 'schedule-days', 'id': 'add-rule-days' }, [
+                            E('button', { 'type': 'button', 'class': 'schedule-day-btn', 'data-day': '1' }, _('Mon')),
+                            E('button', { 'type': 'button', 'class': 'schedule-day-btn', 'data-day': '2' }, _('Tue')),
+                            E('button', { 'type': 'button', 'class': 'schedule-day-btn', 'data-day': '3' }, _('Wed')),
+                            E('button', { 'type': 'button', 'class': 'schedule-day-btn', 'data-day': '4' }, _('Thu')),
+                            E('button', { 'type': 'button', 'class': 'schedule-day-btn', 'data-day': '5' }, _('Fri')),
+                            E('button', { 'type': 'button', 'class': 'schedule-day-btn', 'data-day': '6' }, _('Sat')),
+                            E('button', { 'type': 'button', 'class': 'schedule-day-btn', 'data-day': '7' }, _('Sun'))
+                        ])
+                    ]),
+                    E('div', { 'class': 'form-group' }, [
+                        E('label', { 'class': 'form-label' }, _('Upload Limit')),
+                        E('div', { 'style': 'display: flex; gap: 8px;' }, [
+                            E('input', { 'type': 'number', 'class': 'form-input', 'id': 'add-rule-upload-limit-value', 'min': '0', 'step': '1', 'placeholder': '0' }),
+                            E('select', { 'class': 'cbi-select', 'id': 'add-rule-upload-limit-unit', 'style': 'width: 100px;' })
+                        ]),
+                        E('div', { 'style': 'font-size: 0.75rem; color: #6b7280; margin-top: 4px;' }, _('Tip: Enter 0 for unlimited'))
+                    ]),
+                    E('div', { 'class': 'form-group', 'style': 'margin-bottom: 0;' }, [
+                        E('label', { 'class': 'form-label' }, _('Download Limit')),
+                        E('div', { 'style': 'display: flex; gap: 8px;' }, [
+                            E('input', { 'type': 'number', 'class': 'form-input', 'id': 'add-rule-download-limit-value', 'min': '0', 'step': '1', 'placeholder': '0' }),
+                            E('select', { 'class': 'cbi-select', 'id': 'add-rule-download-limit-unit', 'style': 'width: 100px;' })
+                        ]),
+                        E('div', { 'style': 'font-size: 0.75rem; color: #6b7280; margin-top: 4px;' }, _('Tip: Enter 0 for unlimited'))
+                    ])
+                ]),
+                E('div', { 'class': 'modal-footer' }, [
+                    E('button', { 'class': 'cbi-button cbi-button-reset', 'id': 'add-rule-cancel' }, _('Cancel')),
+                    E('button', { 'class': 'cbi-button cbi-button-positive', 'id': 'add-rule-save' }, _('Add'))
+                ])
+            ])
+        ]);
+
+        document.body.appendChild(addRuleModal);
+
+        // 创建确认对话框
+        var confirmDialog = E('div', { 'class': 'modal-overlay', 'id': 'confirm-dialog-modal' }, [
+            E('div', { 'class': 'modal confirm-dialog' }, [
+                E('div', { 'class': 'modal-body' }, [
+                    E('div', { 'class': 'confirm-dialog-title', 'id': 'confirm-dialog-title' }, _('Confirm')),
+                    E('div', { 'class': 'confirm-dialog-message', 'id': 'confirm-dialog-message' }, ''),
+                    E('div', { 'class': 'confirm-dialog-footer' }, [
+                        E('button', { 'class': 'cbi-button cbi-button-reset', 'id': 'confirm-dialog-cancel' }, _('Cancel')),
+                        E('button', { 'class': 'cbi-button cbi-button-negative', 'id': 'confirm-dialog-confirm' }, _('Confirm'))
+                    ])
+                ])
+            ])
+        ]);
+
+        document.body.appendChild(confirmDialog);
+
+        // 确认对话框相关变量
+        var confirmDialogCallback = null;
+
+        // 显示确认对话框
+        function showConfirmDialog(title, message, onConfirm) {
+            document.getElementById('confirm-dialog-title').textContent = title || _('Confirm');
+            document.getElementById('confirm-dialog-message').textContent = message || '';
+            confirmDialogCallback = onConfirm;
+            
+            // 应用主题颜色
+            try {
+                var cbiSection = document.querySelector('.cbi-section');
+                var targetElement = cbiSection || document.querySelector('.main') || document.body;
+                var computedStyle = window.getComputedStyle(targetElement);
+                var bgColor = computedStyle.backgroundColor;
+                var textColor = computedStyle.color;
+                
+                var modalElement = confirmDialog.querySelector('.modal');
+                
+                if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+                    var rgbaMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+                    if (rgbaMatch) {
+                        var r = parseInt(rgbaMatch[1]);
+                        var g = parseInt(rgbaMatch[2]);
+                        var b = parseInt(rgbaMatch[3]);
+                        var alpha = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
+                        
+                        if (alpha < 0.95) {
+                            modalElement.style.backgroundColor = 'rgb(' + r + ', ' + g + ', ' + b + ')';
+                        } else {
+                            modalElement.style.backgroundColor = bgColor;
+                        }
+                    } else {
+                        modalElement.style.backgroundColor = bgColor;
+                    }
+                }
+                
+                if (textColor && textColor !== 'rgba(0, 0, 0, 0)') {
+                    modalElement.style.color = textColor;
+                }
+            } catch(e) {}
+            
+            confirmDialog.classList.add('show');
+        }
+
+        // 隐藏确认对话框
+        function hideConfirmDialog() {
+            confirmDialog.classList.remove('show');
+            confirmDialogCallback = null;
+        }
+
+        // 确认对话框事件处理
+        document.getElementById('confirm-dialog-confirm').addEventListener('click', function() {
+            if (confirmDialogCallback) {
+                confirmDialogCallback();
+            }
+            hideConfirmDialog();
+        });
+
+        document.getElementById('confirm-dialog-cancel').addEventListener('click', hideConfirmDialog);
+
+        // 点击确认对话框背景关闭
+        confirmDialog.addEventListener('click', function (e) {
+            if (e.target === this) {
+                hideConfirmDialog();
+            }
+        });
+
+        // 日期选择按钮事件处理（添加规则模态框）
+        var addRuleDayButtons = addRuleModal.querySelectorAll('.schedule-day-btn');
+        addRuleDayButtons.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                this.classList.toggle('active');
+            });
+        });
+
+        // 显示添加规则模态框
+        function showAddRuleModal() {
+            if (!currentDevice) return;
+            
+            var addRuleModalEl = document.getElementById('add-rule-modal');
+            var speedUnit = uci.get('bandix', 'traffic', 'speed_unit') || 'bytes';
+            
+            // 动态填充单位选择器
+            var uploadUnitSelect = document.getElementById('add-rule-upload-limit-unit');
+            var downloadUnitSelect = document.getElementById('add-rule-download-limit-unit');
+            
+            uploadUnitSelect.innerHTML = '';
+            downloadUnitSelect.innerHTML = '';
+            
+            if (speedUnit === 'bits') {
+                uploadUnitSelect.appendChild(E('option', { 'value': '125' }, 'Kbps'));
+                uploadUnitSelect.appendChild(E('option', { 'value': '125000' }, 'Mbps'));
+                uploadUnitSelect.appendChild(E('option', { 'value': '125000000' }, 'Gbps'));
+                
+                downloadUnitSelect.appendChild(E('option', { 'value': '125' }, 'Kbps'));
+                downloadUnitSelect.appendChild(E('option', { 'value': '125000' }, 'Mbps'));
+                downloadUnitSelect.appendChild(E('option', { 'value': '125000000' }, 'Gbps'));
+            } else {
+                uploadUnitSelect.appendChild(E('option', { 'value': '1024' }, 'KB/s'));
+                uploadUnitSelect.appendChild(E('option', { 'value': '1048576' }, 'MB/s'));
+                uploadUnitSelect.appendChild(E('option', { 'value': '1073741824' }, 'GB/s'));
+                
+                downloadUnitSelect.appendChild(E('option', { 'value': '1024' }, 'KB/s'));
+                downloadUnitSelect.appendChild(E('option', { 'value': '1048576' }, 'MB/s'));
+                downloadUnitSelect.appendChild(E('option', { 'value': '1073741824' }, 'GB/s'));
+            }
+            
+            // 重置表单
+            resetAddRuleForm();
+            
+            // 应用主题颜色
+            try {
+                var cbiSection = document.querySelector('.cbi-section');
+                var targetElement = cbiSection || document.querySelector('.main') || document.body;
+                var computedStyle = window.getComputedStyle(targetElement);
+                var bgColor = computedStyle.backgroundColor;
+                var textColor = computedStyle.color;
+                
+                var modalElement = addRuleModalEl.querySelector('.modal');
+                
+                if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+                    var rgbaMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+                    if (rgbaMatch) {
+                        var r = parseInt(rgbaMatch[1]);
+                        var g = parseInt(rgbaMatch[2]);
+                        var b = parseInt(rgbaMatch[3]);
+                        var alpha = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
+                        
+                        if (alpha < 0.95) {
+                            modalElement.style.backgroundColor = 'rgb(' + r + ', ' + g + ', ' + b + ')';
+                        } else {
+                            modalElement.style.backgroundColor = bgColor;
+                        }
+                    } else {
+                        modalElement.style.backgroundColor = bgColor;
+                    }
+                }
+                
+                if (textColor && textColor !== 'rgba(0, 0, 0, 0)') {
+                    modalElement.style.color = textColor;
+                }
+            } catch(e) {}
+            
+            // 显示模态框
+            addRuleModalEl.classList.add('show');
+        }
+
+        // 隐藏添加规则模态框
+        function hideAddRuleModal() {
+            var addRuleModalEl = document.getElementById('add-rule-modal');
+            addRuleModalEl.classList.remove('show');
+        }
+
+        // 重置添加规则表单
+        function resetAddRuleForm() {
+            document.getElementById('add-rule-start-time').value = '00:00';
+            document.getElementById('add-rule-end-time').value = '23:59';
+            // 默认选中所有7天 - 重新获取按钮引用
+            var dayButtons = addRuleModal.querySelectorAll('.schedule-day-btn');
+            dayButtons.forEach(function(btn) {
+                btn.classList.add('active');
+            });
+            var speedUnit = uci.get('bandix', 'traffic', 'speed_unit') || 'bytes';
+            document.getElementById('add-rule-upload-limit-value').value = '0';
+            document.getElementById('add-rule-download-limit-value').value = '0';
+            document.getElementById('add-rule-upload-limit-unit').value = speedUnit === 'bits' ? '125' : '1024';
+            document.getElementById('add-rule-download-limit-unit').value = speedUnit === 'bits' ? '125' : '1024';
+        }
+
+        // 添加规则按钮事件处理
+        var scheduleAddRuleBtn = document.getElementById('schedule-add-rule-btn');
+        if (scheduleAddRuleBtn) {
+            scheduleAddRuleBtn.addEventListener('click', function() {
+                showAddRuleModal();
+            });
+        }
+
+        // 添加规则模态框取消按钮
+        document.getElementById('add-rule-cancel').addEventListener('click', hideAddRuleModal);
+
+        // 点击添加规则模态框背景关闭
+        document.getElementById('add-rule-modal').addEventListener('click', function (e) {
+            if (e.target === this) {
+                hideAddRuleModal();
+            }
+        });
+
+        // 保存定时限速规则（从添加规则模态框）
+        document.getElementById('add-rule-save').addEventListener('click', function() {
+            if (!currentDevice) {
+                console.error('No current device selected');
+                return;
+            }
+
+            var saveButton = this;
+            var originalText = saveButton.textContent;
+
+            // 显示加载状态
+            saveButton.innerHTML = '<span class="loading-spinner"></span>' + _('Adding...');
+            saveButton.classList.add('btn-loading');
+            saveButton.disabled = true;
+
+            var startTime = document.getElementById('add-rule-start-time').value;
+            var endTime = document.getElementById('add-rule-end-time').value;
+            // HTML5 time 输入不支持 24:00，将 23:59 转换为 24:00 表示全天
+            if (endTime === '23:59') {
+                endTime = '24:00';
+            }
+            
+            // 重新获取日期按钮引用，确保获取最新状态
+            var addRuleModalEl = document.getElementById('add-rule-modal');
+            var dayButtons = addRuleModalEl.querySelectorAll('.schedule-day-btn');
+            var selectedDays = [];
+            dayButtons.forEach(function(btn) {
+                if (btn.classList.contains('active')) {
+                    selectedDays.push(parseInt(btn.getAttribute('data-day')));
+                }
+            });
+
+            if (!startTime || !endTime) {
+                ui.addNotification(null, E('p', {}, _('Please set time slot')), 'error');
+                saveButton.innerHTML = originalText;
+                saveButton.classList.remove('btn-loading');
+                saveButton.disabled = false;
+                return;
+            }
+
+            if (selectedDays.length === 0) {
+                ui.addNotification(null, E('p', {}, _('Please select at least one day')), 'error');
+                saveButton.innerHTML = originalText;
+                saveButton.classList.remove('btn-loading');
+                saveButton.disabled = false;
+                return;
+            }
+
+            var speedUnit = uci.get('bandix', 'traffic', 'speed_unit') || 'bytes';
+            var scheduleUploadValue = parseInt(document.getElementById('add-rule-upload-limit-value').value) || 0;
+            var scheduleUploadUnit = parseInt(document.getElementById('add-rule-upload-limit-unit').value);
+            var scheduleUploadLimit = scheduleUploadValue > 0 ? scheduleUploadValue * scheduleUploadUnit : 0;
+
+            var scheduleDownloadValue = parseInt(document.getElementById('add-rule-download-limit-value').value) || 0;
+            var scheduleDownloadUnit = parseInt(document.getElementById('add-rule-download-limit-unit').value);
+            var scheduleDownloadLimit = scheduleDownloadValue > 0 ? scheduleDownloadValue * scheduleDownloadUnit : 0;
+
+            console.log('Calling setScheduleLimit:', {
+                mac: currentDevice.mac,
+                startTime: startTime,
+                endTime: endTime,
+                days: selectedDays,
+                uploadLimit: scheduleUploadLimit,
+                downloadLimit: scheduleDownloadLimit
+            });
+
+            callSetScheduleLimit(
+                currentDevice.mac,
+                startTime,
+                endTime,
+                JSON.stringify(selectedDays),
+                scheduleUploadLimit,
+                scheduleDownloadLimit
+            ).then(function(result) {
+                console.log('setScheduleLimit result:', result);
+                // 恢复按钮状态
+                saveButton.innerHTML = originalText;
+                saveButton.classList.remove('btn-loading');
+                saveButton.disabled = false;
+
+                // 隐藏模态框
+                hideAddRuleModal();
+                
+                // 重置表单
+                resetAddRuleForm();
+                
+                // 刷新规则列表
+                loadScheduleRules();
+                updateDeviceData();
+            }).catch(function(error) {
+                console.error('Failed to add schedule rule:', error);
+                // 恢复按钮状态
+                saveButton.innerHTML = originalText;
+                saveButton.classList.remove('btn-loading');
+                saveButton.disabled = false;
+                ui.addNotification(null, E('p', {}, _('Failed to add schedule rule: ') + (error.message || error)), 'error');
+            });
+        });
 
         // 模态框事件处理
         var currentDevice = null;
@@ -1228,35 +2007,16 @@ return view.extend({
             currentDevice = device;
             var modal = document.getElementById('rate-limit-modal');
             var deviceSummary = document.getElementById('modal-device-summary');
-            var speedUnit = uci.get('bandix', 'traffic', 'speed_unit') || 'bytes';
-
-            // 动态填充单位选择器
-            var uploadUnitSelect = document.getElementById('upload-limit-unit');
-            var downloadUnitSelect = document.getElementById('download-limit-unit');
-            
-            // 清空现有选项
-            uploadUnitSelect.innerHTML = '';
-            downloadUnitSelect.innerHTML = '';
-            
-            if (speedUnit === 'bits') {
-                // 比特单位选项 - 直接设置为对应的字节数
-                uploadUnitSelect.appendChild(E('option', { 'value': '125' }, 'Kbps'));       // 1000 bits/s / 8 = 125 bytes/s
-                uploadUnitSelect.appendChild(E('option', { 'value': '125000' }, 'Mbps'));    // 1000000 bits/s / 8 = 125000 bytes/s
-                uploadUnitSelect.appendChild(E('option', { 'value': '125000000' }, 'Gbps')); // 1000000000 bits/s / 8 = 125000000 bytes/s
-                
-                downloadUnitSelect.appendChild(E('option', { 'value': '125' }, 'Kbps'));
-                downloadUnitSelect.appendChild(E('option', { 'value': '125000' }, 'Mbps'));
-                downloadUnitSelect.appendChild(E('option', { 'value': '125000000' }, 'Gbps'));
-            } else {
-                // 字节单位选项
-                uploadUnitSelect.appendChild(E('option', { 'value': '1024' }, 'KB/s'));
-                uploadUnitSelect.appendChild(E('option', { 'value': '1048576' }, 'MB/s'));
-                uploadUnitSelect.appendChild(E('option', { 'value': '1073741824' }, 'GB/s'));
-                
-                downloadUnitSelect.appendChild(E('option', { 'value': '1024' }, 'KB/s'));
-                downloadUnitSelect.appendChild(E('option', { 'value': '1048576' }, 'MB/s'));
-                downloadUnitSelect.appendChild(E('option', { 'value': '1073741824' }, 'GB/s'));
+            // 清空定时限速规则列表并加载
+            var rulesList = document.getElementById('schedule-rules-list');
+            if (rulesList) {
+                rulesList.innerHTML = '<div class="schedule-rules-empty">' + 
+                    _('No scheduled rules yet, click "Add Rule" to start setting') + 
+                    '</div>';
             }
+            
+            // 加载定时限速规则列表
+            loadScheduleRules();
 
             // 更新设备信息
             deviceSummary.innerHTML = E('div', {}, [
@@ -1266,84 +2026,6 @@ return view.extend({
 
             // 设置当前hostname值
             document.getElementById('device-hostname-input').value = device.hostname || '';
-
-            // 设置当前限速值
-            var uploadLimit = device.wide_tx_rate_limit || 0;
-            var downloadLimit = device.wide_rx_rate_limit || 0;
-
-            // 设置上传限速值
-            var uploadValue = uploadLimit;
-            var uploadUnit;
-            if (uploadValue === 0) {
-                document.getElementById('upload-limit-value').value = 0;
-                uploadUnit = speedUnit === 'bits' ? '125' : '1024';
-            } else {
-                if (speedUnit === 'bits') {
-                    // 转换为比特单位显示
-                    var uploadBits = uploadValue * 8;
-                    if (uploadBits >= 1000000000) {
-                        uploadValue = uploadBits / 1000000000;
-                        uploadUnit = '125000000';  // Gbps对应的字节倍数
-                    } else if (uploadBits >= 1000000) {
-                        uploadValue = uploadBits / 1000000;
-                        uploadUnit = '125000';     // Mbps对应的字节倍数
-                    } else {
-                        uploadValue = uploadBits / 1000;
-                        uploadUnit = '125';        // Kbps对应的字节倍数
-                    }
-                } else {
-                    // 字节单位显示
-                    if (uploadValue >= 1073741824) {
-                        uploadValue = uploadValue / 1073741824;
-                        uploadUnit = '1073741824';
-                    } else if (uploadValue >= 1048576) {
-                        uploadValue = uploadValue / 1048576;
-                        uploadUnit = '1048576';
-                    } else {
-                        uploadValue = uploadValue / 1024;
-                        uploadUnit = '1024';
-                    }
-                }
-                document.getElementById('upload-limit-value').value = Math.round(uploadValue);
-            }
-            document.getElementById('upload-limit-unit').value = uploadUnit;
-
-            // 设置下载限速值
-            var downloadValue = downloadLimit;
-            var downloadUnit;
-            if (downloadValue === 0) {
-                document.getElementById('download-limit-value').value = 0;
-                downloadUnit = speedUnit === 'bits' ? '125' : '1024';
-            } else {
-                if (speedUnit === 'bits') {
-                    // 转换为比特单位显示
-                    var downloadBits = downloadValue * 8;
-                    if (downloadBits >= 1000000000) {
-                        downloadValue = downloadBits / 1000000000;
-                        downloadUnit = '125000000';  // Gbps对应的字节倍数
-                    } else if (downloadBits >= 1000000) {
-                        downloadValue = downloadBits / 1000000;
-                        downloadUnit = '125000';     // Mbps对应的字节倍数
-                    } else {
-                        downloadValue = downloadBits / 1000;
-                        downloadUnit = '125';        // Kbps对应的字节倍数
-                    }
-                } else {
-                    // 字节单位显示
-                    if (downloadValue >= 1073741824) {
-                        downloadValue = downloadValue / 1073741824;
-                        downloadUnit = '1073741824';
-                    } else if (downloadValue >= 1048576) {
-                        downloadValue = downloadValue / 1048576;
-                        downloadUnit = '1048576';
-                    } else {
-                        downloadValue = downloadValue / 1024;
-                        downloadUnit = '1024';
-                    }
-                }
-                document.getElementById('download-limit-value').value = Math.round(downloadValue);
-            }
-            document.getElementById('download-limit-unit').value = downloadUnit;
 
             // 应用 cbi-section 的颜色到模态框
             try {
@@ -1437,107 +2119,173 @@ return view.extend({
             }, 300);
         }
 
-        // 保存限速设置
-        function saveRateLimit() {
+        // 加载定时限速规则列表
+        function loadScheduleRules() {
+            if (!currentDevice) return;
+            
+            var rulesList = document.getElementById('schedule-rules-list');
+            if (!rulesList) return;
+            
+            rulesList.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6; font-size: 0.875rem;">' + _('Loading...') + '</div>';
+            
+            callGetScheduleLimits().then(function(res) {
+                // 检查响应格式
+                if (!res) {
+                    rulesList.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6; font-size: 0.875rem;">' + _('No schedule rules') + '</div>';
+                    return;
+                }
+                
+                // 检查是否有错误
+                if (res.success === false || res.error) {
+                    var errorMsg = res.error || _('Failed to load schedule rules');
+                    rulesList.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6; font-size: 0.875rem; color: #ef4444;">' + errorMsg + '</div>';
+                    return;
+                }
+                
+                // 检查数据格式
+                var limits = [];
+                if (res.data && res.data.limits && Array.isArray(res.data.limits)) {
+                    limits = res.data.limits;
+                } else if (Array.isArray(res.limits)) {
+                    // 兼容不同的响应格式
+                    limits = res.limits;
+                } else if (Array.isArray(res)) {
+                    // 如果直接返回数组
+                    limits = res;
+                }
+                
+                var speedUnit = uci.get('bandix', 'traffic', 'speed_unit') || 'bytes';
+                
+                // 过滤出当前设备的规则
+                var deviceRules = limits.filter(function(rule) {
+                    return rule && rule.mac === currentDevice.mac;
+                });
+                
+                // 清空列表
+                rulesList.innerHTML = '';
+                
+                if (deviceRules.length === 0) {
+                    rulesList.innerHTML = '<div class="schedule-rules-empty">' + 
+                        _('No scheduled rules yet, click "Add Rule" to start setting') + 
+                        '</div>';
+                    return;
+                }
+                
+                // 显示所有规则（支持多个规则）
+                deviceRules.forEach(function(rule) {
+                    var daysText = '';
+                    // days 范围是 1-7 (Monday-Sunday)
+                    var dayNames = {
+                        1: _('Mon'),
+                        2: _('Tue'),
+                        3: _('Wed'),
+                        4: _('Thu'),
+                        5: _('Fri'),
+                        6: _('Sat'),
+                        7: _('Sun')
+                    };
+                    if (rule.time_slot && rule.time_slot.days && Array.isArray(rule.time_slot.days)) {
+                        daysText = rule.time_slot.days.map(function(d) { return dayNames[d] || d; }).join(', ');
+                    }
+                    
+                    var startTime = rule.time_slot && rule.time_slot.start ? rule.time_slot.start : '';
+                    var endTime = rule.time_slot && rule.time_slot.end ? rule.time_slot.end : '';
+                    var uploadLimit = rule.wide_tx_rate_limit || 0;
+                    var downloadLimit = rule.wide_rx_rate_limit || 0;
+                    
+                    var ruleItem = E('div', { 'class': 'schedule-rule-item' }, [
+                        E('div', { 'class': 'schedule-rule-info' }, [
+                            E('div', { 'class': 'schedule-rule-time' }, startTime + ' - ' + endTime),
+                            E('div', { 'class': 'schedule-rule-days' }, daysText),
+                            E('div', { 'class': 'schedule-rule-limits' }, 
+                                '↑ ' + formatByterate(uploadLimit, speedUnit) + 
+                                ' / ↓ ' + formatByterate(downloadLimit, speedUnit)
+                            )
+                        ]),
+                        E('button', { 
+                            'class': 'schedule-rule-delete',
+                            'title': _('Delete')
+                        }, _('Delete'))
+                    ]);
+                    
+                    ruleItem.querySelector('.schedule-rule-delete').addEventListener('click', function() {
+                        showConfirmDialog(
+                            _('Delete Schedule Rule'),
+                            _('Are you sure you want to delete this schedule rule?'),
+                            function() {
+                                var days = rule.time_slot && rule.time_slot.days ? JSON.stringify(rule.time_slot.days) : '[]';
+                                callDeleteScheduleLimit(
+                                    rule.mac,
+                                    startTime,
+                                    endTime,
+                                    days
+                                ).then(function() {
+                                    loadScheduleRules();
+                                    updateDeviceData();
+                                }).catch(function(error) {
+                                    ui.addNotification(null, E('p', {}, _('Failed to delete schedule rule')), 'error');
+                                });
+                            }
+                        );
+                    });
+                    
+                    rulesList.appendChild(ruleItem);
+                });
+            }).catch(function(error) {
+                console.error('Failed to load schedule rules:', error);
+                var errorMsg = _('Failed to load schedule rules');
+                if (error && error.message) {
+                    errorMsg += ': ' + error.message;
+                }
+                rulesList.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6; font-size: 0.875rem; color: #ef4444;">' + errorMsg + '</div>';
+            });
+        }
+
+        // 保存 hostname
+        function saveHostname() {
             if (!currentDevice) return;
 
-            var saveButton = document.getElementById('modal-save');
+            var saveButton = document.getElementById('hostname-save-btn');
             var originalText = saveButton.textContent;
-
-            // 显示加载状态
-            saveButton.innerHTML = '<span class="loading-spinner"></span>' + _('Saving...');
-            saveButton.classList.add('btn-loading');
-
-            var uploadLimit = 0;
-            var downloadLimit = 0;
-            var speedUnit = uci.get('bandix', 'traffic', 'speed_unit') || 'bytes';
 
             // 获取hostname值
             var newHostname = document.getElementById('device-hostname-input').value.trim();
 
-            // 获取上传限速值
-            var uploadValue = parseInt(document.getElementById('upload-limit-value').value) || 0;
-            var uploadUnit = parseInt(document.getElementById('upload-limit-unit').value);
-            if (uploadValue > 0) {
-                // 选择器的值已经是正确的字节倍数，直接计算即可
-                uploadLimit = uploadValue * uploadUnit;
+            // 如果hostname没有变化，不需要保存
+            if (newHostname === (currentDevice.hostname || '')) {
+                return;
             }
 
-            // 获取下载限速值
-            var downloadValue = parseInt(document.getElementById('download-limit-value').value) || 0;
-            var downloadUnit = parseInt(document.getElementById('download-limit-unit').value);
-            if (downloadValue > 0) {
-                // 选择器的值已经是正确的字节倍数，直接计算即可
-                downloadLimit = downloadValue * downloadUnit;
-            }
+            // 显示加载状态
+            saveButton.innerHTML = '<span class="loading-spinner"></span>' + _('Saving...');
+            saveButton.classList.add('btn-loading');
+            saveButton.disabled = true;
 
-            // console.log("mac", currentDevice.mac)
-            // console.log("uploadLimit", uploadLimit)
-            // console.log("downloadLimit", downloadLimit)
-            // console.log("newHostname", newHostname)
-
-            // 创建Promise数组来并行处理hostname和限速设置
-            var promises = [];
-
-            // 如果hostname有变化，添加hostname设置Promise
-            if (newHostname !== (currentDevice.hostname || '')) {
-                promises.push(
-                    callSetHostname(currentDevice.mac, newHostname).catch(function(error) {
-                        return { hostnameError: error };
-                    })
-                );
-            }
-
-            // 添加限速设置Promise
-            promises.push(
-                callSetRateLimit(currentDevice.mac, uploadLimit, downloadLimit).catch(function(error) {
-                    return { rateLimitError: error };
-                })
-            );
-
-            // 并行执行所有设置
-            Promise.all(promises).then(function (results) {
+            callSetHostname(currentDevice.mac, newHostname).then(function(result) {
                 // 恢复按钮状态
                 saveButton.innerHTML = originalText;
                 saveButton.classList.remove('btn-loading');
+                saveButton.disabled = false;
 
-                var hasError = false;
-                var errorMessages = [];
-
-                // 检查结果
-                results.forEach(function(result, index) {
-                    if (result && result.hostnameError) {
-                        hasError = true;
-                        errorMessages.push(_('Failed to set hostname'));
-                    } else if (result && result.rateLimitError) {
-                        hasError = true;
-                        errorMessages.push(_('Failed to save settings'));
-                    } else if (result !== true && result !== undefined) {
-                        // 检查是否有其他错误
-                        if (result && result.error) {
-                            hasError = true;
-                            errorMessages.push(result.error);
-                        }
-                    }
-                });
-
-                if (hasError) {
-                    ui.addNotification(null, E('p', {}, errorMessages.join(', ')), 'error');
-                } else {
-                    // 所有设置都成功
-                    hideRateLimitModal();
-                }
-            }).catch(function (error) {
+                // 更新当前设备信息
+                currentDevice.hostname = newHostname;
+                
+                // 刷新设备数据
+                updateDeviceData();
+            }).catch(function(error) {
                 // 恢复按钮状态
                 saveButton.innerHTML = originalText;
                 saveButton.classList.remove('btn-loading');
-                ui.addNotification(null, E('p', {}, _('Failed to save settings')), 'error');
+                saveButton.disabled = false;
+                ui.addNotification(null, E('p', {}, _('Failed to set hostname')), 'error');
             });
         }
 
-        // 绑定模态框事件
-        document.getElementById('modal-cancel').addEventListener('click', hideRateLimitModal);
-        document.getElementById('modal-save').addEventListener('click', saveRateLimit);
+        // 绑定 hostname 保存按钮事件
+        document.getElementById('hostname-save-btn').addEventListener('click', saveHostname);
+
+        // 绑定关闭按钮事件
+        document.getElementById('modal-close').addEventListener('click', hideRateLimitModal);
 
         // 点击模态框背景关闭
         document.getElementById('rate-limit-modal').addEventListener('click', function (e) {
@@ -1550,6 +2298,166 @@ return view.extend({
         var latestDevices = [];
         var lastHistoryData = null; // 最近一次拉取的原始 metrics 数据
         var isHistoryLoading = false; // 防止轮询重入
+        
+        // 定时限速规则：全局存储
+        var allScheduleRules = []; // 存储所有设备的定时限速规则
+        var isScheduleRulesLoading = false; // 防止轮询重入
+        
+        // 获取所有定时限速规则
+        function fetchAllScheduleRules() {
+            if (isScheduleRulesLoading) return Promise.resolve();
+            isScheduleRulesLoading = true;
+            
+            return callGetScheduleLimits().then(function(res) {
+                isScheduleRulesLoading = false;
+                
+                if (!res) {
+                    allScheduleRules = [];
+                    return;
+                }
+                
+                // 检查是否有错误
+                if (res.success === false || res.error) {
+                    allScheduleRules = [];
+                    return;
+                }
+                
+                // 检查数据格式
+                var limits = [];
+                if (res.data && res.data.limits && Array.isArray(res.data.limits)) {
+                    limits = res.data.limits;
+                } else if (Array.isArray(res.limits)) {
+                    limits = res.limits;
+                } else if (Array.isArray(res)) {
+                    limits = res;
+                }
+                
+                allScheduleRules = limits || [];
+            }).catch(function(error) {
+                isScheduleRulesLoading = false;
+                console.error('Failed to fetch schedule rules:', error);
+                allScheduleRules = [];
+            });
+        }
+        
+        // 判断规则是否在当前时间生效
+        function isRuleActive(rule) {
+            if (!rule || !rule.time_slot) return false;
+            
+            var now = new Date();
+            var currentDay = now.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+            // 转换为 1-7 (Monday-Sunday)
+            var dayOfWeek = currentDay === 0 ? 7 : currentDay;
+            
+            // 检查是否在规则指定的日期中
+            var days = rule.time_slot.days || [];
+            if (!Array.isArray(days) || days.length === 0) return false;
+            if (days.indexOf(dayOfWeek) === -1) return false;
+            
+            // 获取当前时间（HH:MM格式）
+            var currentTime = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+            var startTime = rule.time_slot.start || '';
+            var endTime = rule.time_slot.end || '';
+            
+            if (!startTime || !endTime) return false;
+            
+            // 处理 24:00 的情况
+            if (endTime === '24:00') {
+                endTime = '23:59';
+            }
+            
+            // 比较时间
+            if (startTime <= endTime) {
+                // 正常情况：开始时间 <= 结束时间
+                return currentTime >= startTime && currentTime <= endTime;
+            } else {
+                // 跨天情况：开始时间 > 结束时间（例如 22:00 - 06:00）
+                return currentTime >= startTime || currentTime <= endTime;
+            }
+        }
+        
+        // 获取设备当前生效的规则
+        function getActiveRulesForDevice(mac) {
+            if (!allScheduleRules || allScheduleRules.length === 0) return [];
+            
+            return allScheduleRules.filter(function(rule) {
+                return rule && rule.mac === mac && isRuleActive(rule);
+            });
+        }
+        
+        // 合并多个生效规则的限制值
+        // 返回合并后的上传和下载限制（取所有规则中非零的最小值）
+        function mergeActiveRulesLimits(activeRules) {
+            if (!activeRules || activeRules.length === 0) {
+                return { uploadLimit: 0, downloadLimit: 0 };
+            }
+            
+            var uploadLimits = [];
+            var downloadLimits = [];
+            
+            activeRules.forEach(function(rule) {
+                var uploadLimit = rule.wide_tx_rate_limit || 0;
+                var downloadLimit = rule.wide_rx_rate_limit || 0;
+                
+                // 只收集非零的限制值
+                if (uploadLimit > 0) {
+                    uploadLimits.push(uploadLimit);
+                }
+                if (downloadLimit > 0) {
+                    downloadLimits.push(downloadLimit);
+                }
+            });
+            
+            // 取最小值（如果有多个规则都有限制，取最严格的限制）
+            var mergedUploadLimit = uploadLimits.length > 0 ? Math.min.apply(Math, uploadLimits) : 0;
+            var mergedDownloadLimit = downloadLimits.length > 0 ? Math.min.apply(Math, downloadLimits) : 0;
+            
+            return {
+                uploadLimit: mergedUploadLimit,
+                downloadLimit: mergedDownloadLimit
+            };
+        }
+        
+        // 获取多个规则的时间段显示文本
+        // 如果所有规则的时间段相同，显示时间段；如果不同，显示"多个时间段"
+        function getTimeSlotDisplayText(activeRules) {
+            if (!activeRules || activeRules.length === 0) {
+                return '';
+            }
+            
+            if (activeRules.length === 1) {
+                // 单个规则，直接显示时间段
+                var rule = activeRules[0];
+                var startTime = rule.time_slot && rule.time_slot.start ? rule.time_slot.start : '';
+                var endTime = rule.time_slot && rule.time_slot.end ? rule.time_slot.end : '';
+                return startTime + '-' + endTime;
+            }
+            
+            // 多个规则，检查时间段是否相同
+            var firstRule = activeRules[0];
+            var firstStartTime = firstRule.time_slot && firstRule.time_slot.start ? firstRule.time_slot.start : '';
+            var firstEndTime = firstRule.time_slot && firstRule.time_slot.end ? firstRule.time_slot.end : '';
+            
+            var allSame = true;
+            for (var i = 1; i < activeRules.length; i++) {
+                var rule = activeRules[i];
+                var startTime = rule.time_slot && rule.time_slot.start ? rule.time_slot.start : '';
+                var endTime = rule.time_slot && rule.time_slot.end ? rule.time_slot.end : '';
+                
+                if (startTime !== firstStartTime || endTime !== firstEndTime) {
+                    allSame = false;
+                    break;
+                }
+            }
+            
+            if (allSame) {
+                // 所有规则时间段相同，显示时间段和规则数量
+                return firstStartTime + '-' + firstEndTime + ' (' + activeRules.length + ' ' + _('rules') + ')';
+            } else {
+                // 时间段不同，显示"多个时间段"
+                return _('Multiple time slots') + ' (' + activeRules.length + ' ' + _('rules') + ')';
+            }
+        }
         
         // 排序状态管理
         var currentSortBy = localStorage.getItem('bandix_sort_by') || 'online'; // 默认按在线状态排序
@@ -2732,7 +3640,11 @@ function downsampleForMobile(data, labels, upSeries, downSeries, maxPoints) {
 
         // 定义更新设备数据的函数
         function updateDeviceData() {
-            return callStatus().then(function (result) {
+            return Promise.all([
+                callStatus(),
+                fetchAllScheduleRules()
+            ]).then(function (results) {
+                var result = results[0];
                 var trafficDiv = document.getElementById('traffic-status');
                 var deviceCountDiv = document.getElementById('device-count');
                 var statsGrid = document.getElementById('stats-grid');
@@ -2936,7 +3848,7 @@ function downsampleForMobile(data, labels, upSeries, downSeries, maxPoints) {
                             createSortableHeader(_('Device Info'), 'online'),
                             createSplitHeader(_('LAN Traffic'), 'lan_speed', 'lan_traffic'),
                             createSplitHeader(_('WAN Traffic'), 'wan_speed', 'wan_traffic'),
-                            E('th', {}, _('Rate Limit')),
+                            E('th', {}, _('Schedule Rules')),
                             E('th', {}, _('Actions'))
                         ])
                     ]),
@@ -3062,19 +3974,174 @@ function downsampleForMobile(data, labels, upSeries, downSeries, maxPoints) {
                             ])
                         ]),
 
-                        // 限速设置
-                        E('td', {}, [
-                            E('div', { 'class': 'limit-info' }, [
-                                E('div', { 'class': 'traffic-row' }, [
-                                    E('span', { 'class': 'traffic-icon upload', 'style': 'font-size: 0.75rem;' }, '↑'),
-                                    E('span', { 'style': 'font-size: 0.875rem;' }, formatByterate(device.wide_tx_rate_limit || 0, speedUnit))
-                                ]),
-                                E('div', { 'class': 'traffic-row' }, [
-                                    E('span', { 'class': 'traffic-icon download', 'style': 'font-size: 0.75rem;' }, '↓'),
-                                    E('span', { 'style': 'font-size: 0.875rem;' }, formatByterate(device.wide_rx_rate_limit || 0, speedUnit))
-                                ]),
-                            ])
-                        ]),
+                        // 定时限速规则
+                        (function() {
+                            var activeRules = getActiveRulesForDevice(device.mac);
+                            var allDeviceRules = allScheduleRules.filter(function(r) { return r && r.mac === device.mac; });
+                            
+                            var rulesInfo = E('div', { 'class': 'schedule-rules-info' }, []);
+                            
+                            if (allDeviceRules.length === 0) {
+                                rulesInfo.appendChild(E('div', { 'style': 'font-size: 0.75rem; opacity: 0.6;' }, '-'));
+                            } else {
+                                // 显示当前生效的规则
+                                if (activeRules.length > 0) {
+                                    // 合并多个规则的限制值
+                                    var mergedLimits = mergeActiveRulesLimits(activeRules);
+                                    var uploadLimit = mergedLimits.uploadLimit;
+                                    var downloadLimit = mergedLimits.downloadLimit;
+                                    
+                                    // 显示规则数量
+                                    rulesInfo.appendChild(E('div', { 
+                                        'style': 'font-size: 0.75rem; font-weight: 600; margin-bottom: 4px;' 
+                                    }, activeRules.length + ' ' + (activeRules.length === 1 ? _('rule') : _('rules'))));
+                                    
+                                    // 显示限速值（箭头固定颜色，文字默认颜色）
+                                    var limitsContainer = E('div', { 
+                                        'style': 'font-size: 0.75rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;' 
+                                    });
+                                    
+                                    // 上传限速（橙色箭头）
+                                    var uploadSpan = E('span', {});
+                                    uploadSpan.appendChild(E('span', { 'style': 'color: #f97316;' }, '↑'));
+                                    uploadSpan.appendChild(document.createTextNode(uploadLimit > 0 ? formatByterate(uploadLimit, speedUnit) : _('Unlimited')));
+                                    limitsContainer.appendChild(uploadSpan);
+                                    
+                                    // 下载限速（青色箭头）
+                                    var downloadSpan = E('span', {});
+                                    downloadSpan.appendChild(E('span', { 'style': 'color: #06b6d4;' }, '↓'));
+                                    downloadSpan.appendChild(document.createTextNode(downloadLimit > 0 ? formatByterate(downloadLimit, speedUnit) : _('Unlimited')));
+                                    limitsContainer.appendChild(downloadSpan);
+                                    
+                                    rulesInfo.appendChild(limitsContainer);
+                                } else {
+                                    rulesInfo.appendChild(E('div', { 
+                                        'style': 'font-size: 0.75rem; opacity: 0.5;' 
+                                    }, _('No active rule')));
+                                }
+                            }
+                            
+                            // PC 端添加鼠标悬浮事件（显示所有规则）- 只要有规则就绑定事件
+                            var screenWidth = window.innerWidth || document.documentElement.clientWidth;
+                            if (screenWidth > 768 && allDeviceRules.length > 0) {
+                                rulesInfo.onmouseenter = function(evt) {
+                                    var tooltip = document.getElementById('schedule-rules-tooltip');
+                                    if (!tooltip) return;
+                                    
+                                    var html = buildScheduleRulesTooltipHtml(allDeviceRules, activeRules, speedUnit);
+                                    if (!html) return;
+                                    
+                                    tooltip.innerHTML = html;
+                                    
+                                    // 应用主题颜色
+                                    try {
+                                        var cbiSection = document.querySelector('.cbi-section');
+                                        var targetElement = cbiSection || document.querySelector('.main') || document.body;
+                                        var computedStyle = window.getComputedStyle(targetElement);
+                                        var bgColor = computedStyle.backgroundColor;
+                                        var textColor = computedStyle.color;
+                                        
+                                        if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+                                            var rgbaMatch = bgColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+                                            if (rgbaMatch) {
+                                                var r = parseInt(rgbaMatch[1]);
+                                                var g = parseInt(rgbaMatch[2]);
+                                                var b = parseInt(rgbaMatch[3]);
+                                                var alpha = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
+                                                if (alpha < 0.95) {
+                                                    tooltip.style.backgroundColor = 'rgb(' + r + ', ' + g + ', ' + b + ')';
+                                                } else {
+                                                    tooltip.style.backgroundColor = bgColor;
+                                                }
+                                            } else {
+                                                tooltip.style.backgroundColor = bgColor;
+                                            }
+                                        }
+                                        
+                                        if (textColor && textColor !== 'rgba(0, 0, 0, 0)') {
+                                            tooltip.style.color = textColor;
+                                        }
+                                    } catch(e) {}
+                                    
+                                    // 先隐藏，设置内容后再显示以计算尺寸
+                                    tooltip.style.display = 'block';
+                                    tooltip.style.visibility = 'hidden';
+                                    tooltip.style.left = '-9999px';
+                                    tooltip.style.top = '-9999px';
+                                    
+                                    // 强制浏览器计算尺寸
+                                    var tw = tooltip.offsetWidth || 0;
+                                    var th = tooltip.offsetHeight || 0;
+                                    
+                                    if (tw === 0 || th === 0) {
+                                        tooltip.style.display = 'none';
+                                        return;
+                                    }
+                                    
+                                    tooltip.style.visibility = 'visible';
+                                    
+                                    var padding = 12;
+                                    var maxX = window.innerWidth - 4;
+                                    var maxY = window.innerHeight - 4;
+                                    
+                                    var rect = evt.currentTarget.getBoundingClientRect();
+                                    var cx = rect.left + rect.width / 2;
+                                    var cy = rect.top + rect.height / 2;
+                                    
+                                    // 计算位置：优先显示在右侧，如果空间不足则显示在左侧
+                                    var baseX = cx + padding;
+                                    var baseY = cy - th / 2;
+                                    
+                                    if (baseX + tw > maxX) {
+                                        baseX = cx - tw - padding;
+                                    }
+                                    
+                                    if (baseY < 4) baseY = 4;
+                                    if (baseY + th > maxY) baseY = maxY - th - 4;
+                                    
+                                    tooltip.style.left = baseX + 'px';
+                                    tooltip.style.top = baseY + 'px';
+                                };
+                                
+                                rulesInfo.onmouseleave = function() {
+                                    var tooltip = document.getElementById('schedule-rules-tooltip');
+                                    if (tooltip) {
+                                        tooltip.style.display = 'none';
+                                        tooltip.style.visibility = 'visible';
+                                    }
+                                };
+                                
+                                rulesInfo.onmousemove = function(evt) {
+                                    var tooltip = document.getElementById('schedule-rules-tooltip');
+                                    if (!tooltip || tooltip.style.display === 'none') return;
+                                    
+                                    var tw = tooltip.offsetWidth || 0;
+                                    var th = tooltip.offsetHeight || 0;
+                                    var padding = 12;
+                                    var maxX = window.innerWidth - 4;
+                                    var maxY = window.innerHeight - 4;
+                                    
+                                    var rect = evt.currentTarget.getBoundingClientRect();
+                                    var cx = rect.left + rect.width / 2;
+                                    var cy = rect.top + rect.height / 2;
+                                    
+                                    var baseX = cx + padding;
+                                    var baseY = cy - th / 2;
+                                    
+                                    if (baseX + tw > maxX) {
+                                        baseX = cx - tw - padding;
+                                    }
+                                    
+                                    if (baseY < 4) baseY = 4;
+                                    if (baseY + th > maxY) baseY = maxY - th - 4;
+                                    
+                                    tooltip.style.left = baseX + 'px';
+                                    tooltip.style.top = baseY + 'px';
+                                };
+                            }
+                            
+                            return E('td', {}, rulesInfo);
+                        })(),
 
                         // 操作
                         E('td', {}, [
@@ -3108,7 +4175,7 @@ function downsampleForMobile(data, labels, upSeries, downSeries, maxPoints) {
                                 })()
                             ])
                         ]),
-                        // 卡片主要内容（WAN流量和限速）
+                        // 卡片主要内容（WAN流量）
                         E('div', { 'class': 'device-card-content' }, [
                             // WAN流量
                             E('div', { 'class': 'device-card-section' }, [
@@ -3125,63 +4192,69 @@ function downsampleForMobile(data, labels, upSeries, downSeries, maxPoints) {
                                         E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.wide_rx_bytes || 0) + ')')
                                     ])
                                 ])
-                            ]),
-                            // 限速设置
-                            E('div', { 'class': 'device-card-section' }, [
-                                E('div', { 'class': 'device-card-section-label' }, _('Rate Limit')),
-                                E('div', { 'class': 'device-card-traffic' }, [
-                                    E('div', { 'class': 'device-card-traffic-row' }, [
-                                        E('span', { 'style': 'color: #f97316; font-size: 0.75rem; font-weight: bold;' }, '↑'),
-                                        E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.wide_tx_rate_limit || 0, speedUnit))
-                                    ]),
-                                    E('div', { 'class': 'device-card-traffic-row' }, [
-                                        E('span', { 'style': 'color: #06b6d4; font-size: 0.75rem; font-weight: bold;' }, '↓'),
-                                        E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.wide_rx_rate_limit || 0, speedUnit))
-                                    ])
-                                ])
                             ])
                         ]),
-                        // 可展开的详情（LAN流量）
-                        E('div', { 'class': 'device-card-expandable' }, [
-                            E('div', { 'class': 'device-card-section', 'style': 'margin-top: 0;' }, [
-                                E('div', { 'class': 'device-card-section-label' }, _('LAN Traffic')),
-                                E('div', { 'class': 'device-card-traffic' }, [
-                                    E('div', { 'class': 'device-card-traffic-row' }, [
-                                        E('span', { 'style': 'color: #f97316; font-size: 0.75rem; font-weight: bold;' }, '↑'),
-                                        E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.local_tx_rate || 0, speedUnit)),
-                                        E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.local_tx_bytes || 0) + ')')
-                                    ]),
-                                    E('div', { 'class': 'device-card-traffic-row' }, [
-                                        E('span', { 'style': 'color: #06b6d4; font-size: 0.75rem; font-weight: bold;' }, '↓'),
-                                        E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.local_rx_rate || 0, speedUnit)),
-                                        E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.local_rx_bytes || 0) + ')')
-                                    ])
+                        // 定时限速规则
+                        (function() {
+                            var activeRules = getActiveRulesForDevice(device.mac);
+                            var allDeviceRules = allScheduleRules.filter(function(r) { return r && r.mac === device.mac; });
+                            
+                            if (allDeviceRules.length === 0) {
+                                return E('div', { 'class': 'device-card-section device-card-rules' }, [
+                                    E('div', { 'class': 'device-card-section-label' }, _('Schedule Rules')),
+                                    E('div', { 'class': 'device-card-rules-empty' }, '-')
+                                ]);
+                            }
+                            
+                            var rulesContent = E('div', { 'class': 'device-card-rules-content' });
+                            
+                            if (activeRules.length > 0) {
+                                // 合并多个规则的限制值
+                                var mergedLimits = mergeActiveRulesLimits(activeRules);
+                                var uploadLimit = mergedLimits.uploadLimit;
+                                var downloadLimit = mergedLimits.downloadLimit;
+                                
+                                // 显示规则数量
+                                rulesContent.appendChild(E('div', { 
+                                    'class': 'device-card-rules-count' 
+                                }, activeRules.length + ' ' + (activeRules.length === 1 ? _('rule') : _('rules'))));
+                                
+                                // 显示限速值
+                                var limitsText = [];
+                                limitsText.push('↑' + (uploadLimit > 0 ? formatByterate(uploadLimit, speedUnit) : _('Unlimited')));
+                                limitsText.push('↓' + (downloadLimit > 0 ? formatByterate(downloadLimit, speedUnit) : _('Unlimited')));
+                                
+                                rulesContent.appendChild(E('div', { 
+                                    'class': 'device-card-rules-active-time' 
+                                }, limitsText.join(' ')));
+                            } else {
+                                rulesContent.appendChild(E('div', { 
+                                    'class': 'device-card-rules-inactive' 
+                                }, _('No active rule')));
+                            }
+                            
+                            return E('div', { 'class': 'device-card-section device-card-rules' }, [
+                                E('div', { 'class': 'device-card-section-label' }, _('Schedule Rules')),
+                                rulesContent
+                            ]);
+                        })(),
+                        // LAN流量（直接显示，不需要展开/收起）
+                        E('div', { 'class': 'device-card-section', 'style': 'margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, 0.1);' }, [
+                            E('div', { 'class': 'device-card-section-label' }, _('LAN Traffic')),
+                            E('div', { 'class': 'device-card-traffic' }, [
+                                E('div', { 'class': 'device-card-traffic-row' }, [
+                                    E('span', { 'style': 'color: #f97316; font-size: 0.75rem; font-weight: bold;' }, '↑'),
+                                    E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.local_tx_rate || 0, speedUnit)),
+                                    E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.local_tx_bytes || 0) + ')')
+                                ]),
+                                E('div', { 'class': 'device-card-traffic-row' }, [
+                                    E('span', { 'style': 'color: #06b6d4; font-size: 0.75rem; font-weight: bold;' }, '↓'),
+                                    E('span', { 'style': 'font-weight: 600;' }, formatByterate(device.local_rx_rate || 0, speedUnit)),
+                                    E('span', { 'style': 'font-size: 0.75rem; opacity: 0.7;' }, '(' + formatSize(device.local_rx_bytes || 0) + ')')
                                 ])
                             ])
-                        ]),
-                        // 展开/收起按钮
-                        E('button', { 'class': 'device-card-toggle' }, _('Show More'))
+                        ])
                     ]);
-                    
-                    // 检查并恢复展开状态
-                    if (expandedDeviceCards.has(device.mac)) {
-                        card.classList.add('expanded');
-                    }
-                    
-                    // 绑定展开/收起功能
-                    var toggleBtn = card.querySelector('.device-card-toggle');
-                    toggleBtn.textContent = card.classList.contains('expanded') ? _('Show Less') : _('Show More');
-                    toggleBtn.addEventListener('click', function() {
-                        card.classList.toggle('expanded');
-                        var isExpanded = card.classList.contains('expanded');
-                        toggleBtn.textContent = isExpanded ? _('Show Less') : _('Show More');
-                        // 保存展开状态
-                        if (isExpanded) {
-                            expandedDeviceCards.add(device.mac);
-                        } else {
-                            expandedDeviceCards.delete(device.mac);
-                        }
-                    });
                     
                     cardsContainer.appendChild(card);
                 });
@@ -3206,9 +4279,20 @@ function downsampleForMobile(data, labels, upSeries, downSeries, maxPoints) {
 
         // 轮询获取数据
         poll.add(updateDeviceData, 1);
+        
+        // 轮询获取定时限速规则（每5秒）
+        poll.add(function() {
+            return fetchAllScheduleRules().then(function() {
+                // 规则更新后，重新渲染表格以显示最新的规则状态
+                if (window.__bandixRenderTable) {
+                    window.__bandixRenderTable();
+                }
+            });
+        }, 5000);
 
         // 立即执行一次，不等待轮询
         updateDeviceData();
+        fetchAllScheduleRules();
 
         // 自动适应主题背景色和文字颜色的函数（仅应用于弹窗和 tooltip）
         function applyThemeColors() {
