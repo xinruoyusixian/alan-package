@@ -286,5 +286,11 @@
     "local_path": "fwx",
     "pulled_at": "2026-01-06T09:14:01+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "fanchmwrt/fanchmwrt/package/fwxd",
+    "local_path": "fwxd",
+    "pulled_at": "2026-01-06T09:14:26+00:00",
+    "status": "success"
   }
 ]
