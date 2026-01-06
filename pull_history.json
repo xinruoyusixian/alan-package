@@ -262,5 +262,11 @@
     "local_path": "luci-app-fwx-network",
     "pulled_at": "2026-01-06T08:53:12+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "fanchmwrt/fanchmwrt-packages/luci-app-fwx-resources",
+    "local_path": "luci-app-fwx-resources",
+    "pulled_at": "2026-01-06T08:53:45+00:00",
+    "status": "success"
   }
 ]
