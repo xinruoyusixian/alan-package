@@ -238,5 +238,11 @@
     "local_path": "luci-app-subconverter",
     "pulled_at": "2026-01-06T02:04:48+00:00",
     "status": "success"
+  },
+  {
+    "target_path": "fanchmwrt/fanchmwrt-packages/luci-app-fwx-dashboard-setting",
+    "local_path": "luci-app-fwx-dashboard-setting",
+    "pulled_at": "2026-01-06T08:51:52+00:00",
+    "status": "success"
   }
 ]
