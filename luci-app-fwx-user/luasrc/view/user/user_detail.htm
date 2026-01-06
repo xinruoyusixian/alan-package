@@ -1,0 +1,1146 @@
+<link rel="stylesheet" href="<%=resource%>/css/common.css">
+<% local dsp=require "luci.dispatcher" -%>
+<script type="text/javascript" src="<%=resource%>/echarts.min.js?v=5.0"></script>
+
+<script type="text/javascript">//<![CDATA[
+	let visit_time_data = [];
+	let visit_list_data = {};
+	let visit_cur_page = 1;
+	let visit_page_size = 15;
+	let visit_total_num = 0;
+	let visit_total_page = 1;
+	let hourlyTrafficChart = null;
+	let hourlyAppsChart = null;
+	let hourlyStatsData = null;
+	let appTimeChart = null;
+	let visit_refresh_timer = null;
+	let visit_refresh_inflight = false;
+	
+	function getUrlParameter(name) {
+		name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+		var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+		var results = regex.exec(location.search);
+		return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+	}
+	
+	var mac = getUrlParameter('mac');
+	if (!mac) {
+		var pathParts = window.location.pathname.split('/');
+		var macIndex = pathParts.indexOf('detail');
+		if (macIndex >= 0 && pathParts.length > macIndex + 1) {
+			mac = pathParts[macIndex + 1];
+		}
+	}
+	
+	if (!mac) {
+		document.addEventListener('DOMContentLoaded', function() {
+			var errorDiv = document.createElement('div');
+			errorDiv.style.cssText = 'padding: 20px; text-align: center;';
+			var backUrl = '<%=url("admin/fwx_user/list")%>';
+			errorDiv.innerHTML = '<h3><%:Missing MAC parameter%></h3><p><a href="' + backUrl + '"><%:Back to User List%></a></p>';
+			document.body.appendChild(errorDiv);
+		});
+	} else {
+		var pageTitle = '<%:User Detail%>';
+		document.title = pageTitle + ' - ' + mac;
+		
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', loadUserDetailData);
+		} else {
+			loadUserDetailData();
+		}
+	}
+	
+	function loadUserDetailData() {
+		if (!mac) return;
+		
+		loadUserBasicInfo();
+		
+		loadAppVisitTime();
+
+		loadHourlyStatsData();
+
+		loadVisitListData(visit_cur_page);
+	}
+	
+	function loadUserBasicInfo() {
+		if (!mac) return;
+		new XHR().get("<%=url('admin/fwx/get_user_basic_info')%>/" + mac, null,
+			function (x, data) {
+				if (data && data.mac) {
+					render_user_basic_info(data);
+				}
+			}
+		);
+	}
+	
+	function render_user_basic_info(user) {
+		if (!user) return;
+		
+		document.getElementById('basic_info_mac').textContent = user.mac || '--';
+		document.getElementById('basic_info_ip').textContent = user.ip || '--';
+		document.getElementById('basic_info_nickname').textContent = user.nickname || '--';
+		document.getElementById('basic_info_hostname').textContent = user.hostname || '--';
+		
+		var todayUpBytes = user.today_up_bytes || 0;
+		var todayDownBytes = user.today_down_bytes || 0;
+		var totalTraffic = todayUpBytes + todayDownBytes;
+		var upTrafficStr = formatTraffic(todayUpBytes);
+		var downTrafficStr = formatTraffic(todayDownBytes);
+		var totalTrafficStr = formatTraffic(totalTraffic);
+		var trafficElement = document.getElementById('basic_info_traffic');
+		trafficElement.textContent = totalTrafficStr;
+		trafficElement.setAttribute('title', '<%:Upstream%>: ' + upTrafficStr + '\n<%:Downstream%>: ' + downTrafficStr);
+		
+		var todayOnlineTime = user.today_online_time || 0;
+		document.getElementById('basic_info_online_time').textContent = get_display_time(todayOnlineTime);
+		
+		var todayOnlineDuration = user.today_online_duration || 0;
+		document.getElementById('basic_info_online_duration').textContent = get_display_time(todayOnlineDuration);
+		
+		var statusElement = document.getElementById('basic_info_status');
+		if (user.online == 1) {
+			statusElement.innerHTML = '<span style="color: #22c55e;"><%:Online%></span>';
+		} else {
+			statusElement.textContent = '<%:Offline%>';
+		}
+	}
+
+	function loadAppVisitTime() {
+		if (!mac) return;
+		new XHR().get("<%=url('admin/fwx/dev_visit_time')%>/" + mac, null,
+			function (x, st) {
+				visit_time_data = st;
+				display_app_visit_view(visit_time_data);
+			}
+		);
+	}
+
+	function startVisitAutoRefresh() {
+		if (visit_refresh_timer) return;
+		visit_refresh_timer = window.setInterval(function () {
+			var tab3 = document.getElementById('tab3');
+			if (!tab3 || !tab3.classList.contains('active')) return;
+			if (visit_refresh_inflight) return;
+			visit_refresh_inflight = true;
+			loadVisitListData(visit_cur_page, function () {
+				visit_refresh_inflight = false;
+			});
+		}, 3000);
+	}
+
+	function stopVisitAutoRefresh() {
+		if (!visit_refresh_timer) return;
+		window.clearInterval(visit_refresh_timer);
+		visit_refresh_timer = null;
+		visit_refresh_inflight = false;
+	}
+	
+	function loadOnlineOfflineRecords() {
+		if (!mac) return;
+		
+		new XHR().get("<%=url('admin/fwx/get_online_offline_records')%>?mac=" + encodeURIComponent(mac), null,
+			function (x, st) {
+				if (st && st.records) {
+					renderOnlineOfflineRecords(st.records);
+				} else {
+					renderOnlineOfflineRecords([]);
+				}
+			}
+		);
+	}
+	
+	function renderOnlineOfflineRecords(records) {
+		var tbody = document.getElementById('online_offline_records_tbody');
+		if (!tbody) return;
+		
+		if (!records || records.length === 0) {
+			tbody.innerHTML = '<tr class="tr"><td class="td" colspan="3" style="text-align: center;"><%:No records%></td></tr>';
+			return;
+		}
+		
+		var html = '';
+		for (var i = 0; i < records.length; i++) {
+			var record = records[i];
+			var typeText = record.type == 0 ? '<%:Online Event%>' : '<%:Offline Event%>';
+			var typeClass = record.type == 0 ? 'style="color: #22c55e;"' : 'style="color: #F44336;"';
+			var timeStr = record.time_str || new Date(record.timestamp * 1000).toLocaleString('zh-CN');
+			var durationStr = record.duration_str || formatDuration(record.duration);
+			
+			html += '<tr class="tr">';
+			html += '<td class="td" ' + typeClass + '>' + typeText + '</td>';
+			html += '<td class="td">' + timeStr + '</td>';
+			html += '<td class="td">' + durationStr + '</td>';
+			html += '</tr>';
+		}
+		
+		tbody.innerHTML = html;
+	}
+	
+	function formatDuration(seconds) {
+		if (!seconds || seconds == 0) return '0<%:s%>';
+		
+		var hours = Math.floor(seconds / 3600);
+		var minutes = Math.floor((seconds % 3600) / 60);
+		var secs = seconds % 60;
+		
+		var result = '';
+		if (hours > 0) {
+			result += hours + '<%:h%>';
+		}
+		if (minutes > 0) {
+			result += minutes + '<%:min%>';
+		}
+		if (secs > 0 || result === '') {
+			result += secs + '<%:s%>';
+		}
+		
+		return result;
+	}
+	
+	function loadHourlyStatsData() {
+		if (!mac) return;
+		
+		new XHR().get("<%=url('admin/fwx/get_hourly_stats')%>/" + mac, null,
+			function (x, st) {
+				console.log("hourly_stats_data = ", st);
+				if (st && st.hourly_stats) {
+					hourlyStatsData = st.hourly_stats;
+					var tab4 = document.getElementById('tab4');
+					var tab5 = document.getElementById('tab5');
+					if (tab4 && tab4.classList.contains('active')) {
+						renderHourlyTrafficChart(hourlyStatsData);
+					}
+					if (tab5 && tab5.classList.contains('active')) {
+						renderHourlyAppsChart(hourlyStatsData);
+					}
+				}
+			}
+		);
+	}
+
+	function formatTimeDuration(seconds) {
+		if (!seconds || seconds < 60) {
+			return seconds + '<%:s%>';
+		} else if (seconds < 3600) {
+			var minutes = Math.floor(seconds / 60);
+			var secs = seconds % 60;
+			return minutes + '<%:m%>' + (secs > 0 ? secs + '<%:s%>' : '');
+		} else {
+			var hours = Math.floor(seconds / 3600);
+			var minutes = Math.floor((seconds % 3600) / 60);
+			var secs = seconds % 60;
+			return hours + '<%:h%>' + (minutes > 0 ? minutes + '<%:m%>' : '') + (secs > 0 ? secs + '<%:s%>' : '');
+		}
+	}
+
+	function get_display_time(seconds) {
+		var hours = Math.floor(seconds / 3600);
+		var minutes = Math.floor((seconds % 3600) / 60);
+		var timeStr = '';
+		if (hours > 0) {
+			timeStr = hours + '<%:h%>' + (minutes > 0 ? minutes + '<%:m%>' : '');
+		} else {
+			timeStr = minutes + '<%:m%>';
+		}
+		return timeStr;
+	}
+
+	function display_app_visit_view(data) {
+		var chartElement = document.getElementById('app_time_chart');
+		if (!chartElement) {
+			console.error("Chart element not found");
+			return;
+		}
+		
+		var tab2 = document.getElementById('tab2');
+		var isVisible = tab2 && (tab2.classList.contains('active') || window.getComputedStyle(tab2).display !== 'none');
+		
+		if (!appTimeChart) {
+			if (!isVisible) {
+				return;
+			}
+			appTimeChart = echarts.init(chartElement);
+		}
+		
+		if (!data) {
+			return;
+		}
+		
+		var themeTextColor = '#c9d1d9'; // 默认值
+		try {
+			var bodyStyle = window.getComputedStyle(document.body);
+			themeTextColor = bodyStyle.color || themeTextColor;
+		} catch(e) {
+		}
+		
+		var palette = [
+			'#34d399',  // emerald-400 - 柔和的青绿色
+			'#22c55e',  // green-500 - 保持原有绿色
+			'#06b6d4',  // cyan-500 - 保持原有青色
+			'#60a5fa',  // blue-400 - 柔和的蓝色
+			'#a78bfa',  // violet-400 - 柔和的紫色
+			'#f472b6',  // pink-400 - 柔和的粉色
+			'#fb923c',  // orange-400 - 柔和的橙色
+			'#fbbf24',  // amber-400 - 柔和的琥珀色
+			'#10b981',  // emerald-500 - 备用绿色
+			'#3b82f6',  // blue-500 - 备用蓝色
+			'#8b5cf6',  // violet-500 - 深紫色
+			'#ec4899'   // pink-500 - 深粉色
+		];
+		
+		var total_time = 0
+		var app_stat_array = new Array();
+		if (data.length == 0){
+			var app_obj ={}
+			app_obj.name = "<%:Unknown App%>"
+			app_obj.value = 0
+			app_obj.legendname = app_obj.name
+			app_stat_array.push(app_obj)
+		}
+		else{
+			for (var i = 0; i < data.length; i++) {
+				var app_obj = {};
+				app_obj.value = data[i].t;
+				app_obj.legendname = data[i].name;
+				var tmp_time = get_display_time(data[i].t);
+				app_obj.name = data[i].name + "  " + tmp_time;
+				total_time += data[i].t
+				app_stat_array.push(app_obj);
+			}
+		}
+		console.log("hello")
+		var total_time_str = get_display_time(total_time);
+		var option = {
+			backgroundColor: 'transparent',
+			animation: false,  // 禁用动画
+			color: palette,
+			textStyle: {
+				color: themeTextColor  // 使用主题文字颜色
+			},
+			grid:{
+			},
+			title: [
+				{
+					text: "<%:App Time Statistics%>",
+					textStyle: {
+						fontSize: 16,
+						color: themeTextColor  // 使用主题文字颜色
+					},
+					left: "2%"
+				},
+				{
+					text: '',
+					subtext: total_time_str,
+					textStyle: {
+						fontSize: 15,
+						color: themeTextColor  // 使用主题文字颜色
+					},
+					subtextStyle: {
+						fontSize: 15,
+						color: themeTextColor  // 使用主题文字颜色
+					},
+					textAlign: "center",
+					x: '34.5%',
+					y: '44%',
+				}],
+			tooltip: {
+				trigger: 'item',
+				formatter: function (parms) {
+					var total_time = get_display_time(parms.data.value);
+					var str = parms.seriesName + "</br>" +
+						parms.marker + "" + parms.data.legendname + "</br>" +
+						"<%:Visit Time%>: " + total_time + "</br>" +
+						"<%:Percentage%>: " + parms.percent + "%";
+					return str;
+				}
+			},
+			legend: {
+				type: "scroll",
+				orient: 'vertical',
+				left: '75%',
+				align: 'left',
+				top: 'middle',
+				textStyle: {
+					color: themeTextColor  // 使用主题文字颜色
+				},
+				height: 250
+			},
+			series: [
+				{
+					name: "<%:Visit Time%>",
+					type: 'pie',
+					radius: ['58%', '70%'],
+					center: ['35%', '50%'], // 饼图的中心位置,调整离开左侧的距离
+					clockwise: false,
+					avoidLabelOverlap: true,
+					itemStyle: {
+						borderRadius: 1,
+						borderColor: "#fff",
+						borderWidth: 1,
+					},
+					label: {
+						show: true,
+						position: 'outside',
+						formatter: '{b}: {c} ({d}%)',
+						normal: {
+							show: true,
+							position: 'outter',
+							formatter: function (parms) {
+								return parms.data.legendname
+							}
+						}
+					},
+					labelLine: {
+						show: true,
+						length: 8,
+						length2: 7,
+						smooth: true,
+					},
+					data: app_stat_array
+				}
+			]
+		};
+
+		appTimeChart.setOption(option);
+	}
+
+	function loadVisitListData(page) {
+		if (!mac) return;
+		var url = "<%=url('admin/fwx/dev_visit_list')%>/" + mac + "?page=" + page + "&page_size=" + visit_page_size;
+		var cb = arguments.length > 1 ? arguments[1] : null;
+		new XHR().get(url, null,
+			function (x, st) {
+				visit_list_data = st;
+				visit_total_num = st.total_num || 0;
+				visit_total_page = st.total_page || 1;
+				visit_cur_page = st.page || 1;
+				console.log("visit_list_data = " + visit_list_data);
+				render_visit_list_table(visit_list_data);
+				render_visit_pagination();
+				if (typeof cb === 'function') cb();
+			}
+		);
+	}
+
+	function render_visit_list_table(data) {
+		var tb = document.getElementById('visit_list_table');
+		var visit_list = data.list;
+		if (visit_list && tb) {
+			/* clear all rows */
+			while (tb.rows.length > 1)
+				tb.deleteRow(1);
+			for (var i = 0; i < visit_list.length; i++) {
+				var action_status = visit_list[i].act == 1
+					? '<span style="color:#F44336;"><%:Filtered%></span>'
+					: '<span style="color:#22c55e;"><%:Unfiltered%></span>';
+				var hostname = visit_list[i].hostname == "" || visit_list[i].hostname == "*" ? "--" : visit_list[i].hostname;
+				var tr = tb.insertRow(-1);
+				tr.className = 'tr';
+
+				var appIconPath = '<%=resource%>/app_icons/';
+				var defaultIconPath = '<%=resource%>/app_icons/default.png';
+				tr.insertCell(-1).innerHTML = 
+					'<div style="height: 24px; display: flex; align-items: center;">' +
+						'<img src="' + appIconPath + visit_list[i].id + '.png" alt="' + visit_list[i].name + '" title="' + visit_list[i].name + '" style="width: 20px; height: 20px; border-radius: 5px; margin-right: 4px;" onerror="this.src=\'' + defaultIconPath + '\'">' +
+						'<span>' + visit_list[i].name + '</span>' +
+					'</div>';
+
+				var first_time_date = new Date(visit_list[i].ft * 1000); // Assuming first_time is in seconds
+				var first_time_str = first_time_date.toLocaleString(); // Convert to local date string
+
+				var latest_time_date = new Date(visit_list[i].lt * 1000); // Assuming first_time is in seconds
+				var latest_time_str = latest_time_date.toLocaleString(); // Convert to local date string
+
+				tr.insertCell(-1).innerHTML = first_time_str;
+				tr.insertCell(-1).innerHTML = latest_time_str;
+				var hour = parseInt(visit_list[i].tt / 3600);
+				var seconds = visit_list[i].tt % 3600;
+				var min = parseInt(seconds / 60)
+				var total_time_str;
+				if (visit_list[i].act == 1)
+					total_time_str = "-"
+				else {
+					if (hour > 0)
+						total_time_str = hour + "<%:h%>" + min + "<%:m%>"
+					else {
+						if (min == 0)
+							min = 1;
+						total_time_str = min + "<%:m%>"
+					}
+				}
+
+				tr.insertCell(-1).innerHTML = total_time_str;
+				var online_status = visit_list[i].online == 1
+					? '<span style="color:#22c55e;"><%:Online%></span>'
+					: '<span style="color:#F44336;"><%:Offline%></span>';
+				tr.insertCell(-1).innerHTML = online_status;
+				tr.insertCell(-1).innerHTML = action_status;
+				var childs = tr.childNodes;
+				Array.prototype.forEach.call(childs, function (child) {
+					child.className = 'td';
+				});
+			}
+		}
+	}
+
+	function render_visit_pagination() {
+		var paginationDiv = document.getElementById('visit_pagination');
+		if (!paginationDiv) return;
+		
+		if (visit_total_page <= 1) {
+			paginationDiv.innerHTML = '';
+			return;
+		}
+		
+		var html = '<div style="display: flex; justify-content: center; align-items: center; margin: 20px 0; gap: 5px;">';
+		
+		if (visit_cur_page > 1) {
+			html += '<button type="button" class="cbi-button" onclick="goToVisitPage(' + (visit_cur_page - 1) + ')" style="min-width: 60px;"><%:Prev Page%></button>';
+		} else {
+			html += '<button type="button" class="cbi-button" disabled style="min-width: 60px; opacity: 0.5;"><%:Prev Page%></button>';
+		}
+		
+		var startPage = Math.max(1, visit_cur_page - 2);
+		var endPage = Math.min(visit_total_page, visit_cur_page + 2);
+		
+		if (startPage > 1) {
+			html += '<button type="button" class="cbi-button" onclick="goToVisitPage(1)" style="min-width: 40px;">1</button>';
+			if (startPage > 2) {
+				html += '<span style="padding: 0 5px;">...</span>';
+			}
+		}
+		
+		for (var i = startPage; i <= endPage; i++) {
+			if (i === visit_cur_page) {
+				html += '<button type="button" class="cbi-button cbi-button-action" style="min-width: 40px; font-weight: bold;">' + i + '</button>';
+			} else {
+				html += '<button type="button" class="cbi-button" onclick="goToVisitPage(' + i + ')" style="min-width: 40px;">' + i + '</button>';
+			}
+		}
+		
+		if (endPage < visit_total_page) {
+			if (endPage < visit_total_page - 1) {
+				html += '<span style="padding: 0 5px;">...</span>';
+			}
+			html += '<button type="button" class="cbi-button" onclick="goToVisitPage(' + visit_total_page + ')" style="min-width: 40px;">' + visit_total_page + '</button>';
+		}
+		
+		if (visit_cur_page < visit_total_page) {
+			html += '<button type="button" class="cbi-button" onclick="goToVisitPage(' + (visit_cur_page + 1) + ')" style="min-width: 60px;"><%:Next Page%></button>';
+		} else {
+			html += '<button type="button" class="cbi-button" disabled style="min-width: 60px; opacity: 0.5;"><%:Next Page%></button>';
+		}
+		
+		var startRecord = (visit_cur_page - 1) * visit_page_size + 1;
+		var endRecord = Math.min(visit_cur_page * visit_page_size, visit_total_num);
+		html += '<span style="margin-left: 20px; color: #999;"><%:Total%> ' + visit_total_num + ' <%:Records%>，<%:Showing%> ' + startRecord + '-' + endRecord + '</span>';
+		
+		html += '</div>';
+		paginationDiv.innerHTML = html;
+	}
+	
+	function goToVisitPage(page) {
+		if (page < 1 || page > visit_total_page || page === visit_cur_page) {
+			return;
+		}
+		visit_cur_page = page;
+		loadVisitListData(visit_cur_page);
+	}
+
+	function renderHourlyTrafficChart(hourlyStats) {
+		var chartDom = document.getElementById('hourly_traffic_chart');
+		if (!chartDom) {
+			console.error('hourly_traffic_chart element not found');
+			return;
+		}
+		
+		if (hourlyTrafficChart) {
+			hourlyTrafficChart.dispose();
+			hourlyTrafficChart = null;
+		}
+		
+		hourlyTrafficChart = echarts.init(chartDom);
+		if (!hourlyTrafficChart) {
+			console.error('Failed to initialize hourlyTrafficChart');
+			return;
+		}
+		
+		var hours = [];
+		var upBytes = [];
+		var downBytes = [];
+		
+		var sortedStats = hourlyStats.slice().sort(function(a, b) {
+			return a.hour - b.hour;
+		});
+		
+		for (var i = 0; i < sortedStats.length; i++) {
+			var stat = sortedStats[i];
+			hours.push(stat.hour + ':00');
+			if (stat.traffic) {
+				upBytes.push(Math.round(stat.traffic.up_bytes / (1024 * 1024))); // 转换为MB
+				downBytes.push(Math.round(stat.traffic.down_bytes / (1024 * 1024))); // 转换为MB
+			} else {
+				upBytes.push(0);
+				downBytes.push(0);
+			}
+		}
+		
+		var textColor = window.getComputedStyle(document.body).color || '#ffffff';
+		
+		var option = {
+			title: {
+				text: '<%:Today Traffic Statistics (24 Hours)%>',
+				left: 'center',
+				textStyle: {
+					color: textColor
+				}
+			},
+			tooltip: {
+				trigger: 'axis',
+				axisPointer: {
+					type: 'shadow'
+				},
+				formatter: function(params) {
+					var result = params[0].name + '<br/>';
+					for (var i = 0; i < params.length; i++) {
+						var param = params[i];
+						var value = param.value;
+						var totalBytes = value * 1024 * 1024; // MB转回字节
+						var formatted = formatTraffic(totalBytes);
+						result += param.seriesName + ': ' + formatted + '<br/>';
+					}
+					return result;
+				}
+			},
+			legend: {
+				data: ['<%:Upstream Traffic%>', '<%:Downstream Traffic%>'],
+				top: 30,
+				textStyle: {
+					color: textColor
+				}
+			},
+			grid: {
+				left: '1%',
+				right: '1%',
+				bottom: '10%',
+				top: '15%',
+				containLabel: true
+			},
+			xAxis: {
+				type: 'category',
+				data: hours,
+				axisLabel: {
+					color: textColor,
+					rotate: 45,
+					interval: 0
+				},
+				axisLine: {
+					lineStyle: {
+						color: textColor
+					}
+				}
+			},
+			yAxis: {
+			type: 'value',
+			name: '<%:Traffic%>',
+			minInterval: 1,
+			nameTextStyle: {
+				color: textColor
+			},
+			axisLabel: {
+				color: textColor,
+				formatter: function(value) {
+					if (value === 0) return '0';
+					if (value < 1) {
+						var kb = Math.round(value * 1024);
+						if (kb >= 100) {
+							kb = Math.round(kb / 100) * 100;
+						}
+						return kb + 'KB';
+					} else if (value < 1024) {
+						var mb = Math.round(value);
+						if (mb >= 100) {
+							mb = Math.round(mb / 100) * 100;
+						}
+						return mb + 'MB';
+					} else {
+						return Math.round(value / 1024) + 'GB';
+					}
+				}
+			},
+			axisLine: {
+				lineStyle: {
+					color: textColor
+				}
+			},
+			splitLine: {
+				lineStyle: {
+					color: 'rgba(255, 255, 255, 0.1)'
+				}
+			}
+		},
+			series: [
+				{
+					name: '<%:Upstream Traffic%>',
+					type: 'bar',
+					data: upBytes,
+					stack: 'traffic',
+					barWidth: 20,
+					barMaxWidth: 30,
+					itemStyle: {
+						color: '#5470c6'
+					}
+				},
+				{
+					name: '<%:Downstream Traffic%>',
+					type: 'bar',
+					data: downBytes,
+					stack: 'traffic',
+					barWidth: 20,
+					barMaxWidth: 30,
+					itemStyle: {
+						color: '#91cc75'
+					}
+				}
+			]
+		};
+		
+		if (!hourlyTrafficChart) {
+			console.error('hourlyTrafficChart is null, cannot setOption');
+			return;
+		}
+		
+		hourlyTrafficChart.setOption(option);
+		setTimeout(function() {
+			if (hourlyTrafficChart) {
+				hourlyTrafficChart.resize();
+			}
+		}, 200);
+	}
+
+	function renderHourlyAppsChart(hourlyStats) {
+		var chartDom = document.getElementById('hourly_apps_chart');
+		if (!chartDom) return;
+		
+		if (hourlyAppsChart) {
+			hourlyAppsChart.dispose();
+		}
+		
+		hourlyAppsChart = echarts.init(chartDom);
+		
+		var hours = [];
+		var appSeries = {}; // appid -> {name, data: []}
+		
+		var sortedStats = hourlyStats.slice().sort(function(a, b) {
+			return a.hour - b.hour;
+		});
+		
+		for (var i = 0; i < sortedStats.length; i++) {
+			var stat = sortedStats[i];
+			hours.push(stat.hour + ':00');
+			
+			if (stat.apps && stat.apps.length > 0) {
+				for (var j = 0; j < stat.apps.length; j++) {
+					var app = stat.apps[j];
+					if (app.appid > 0) {
+						if (!appSeries[app.appid]) {
+							appSeries[app.appid] = {
+								name: app.name || 'Unknown',
+								data: new Array(sortedStats.length).fill(0)
+							};
+						}
+						var appTime = app.time || 0;
+						appSeries[app.appid].data[i] = appTime;
+					}
+				}
+			}
+		}
+		
+		var series = [];
+		var appIds = Object.keys(appSeries);
+		appIds.sort(function(a, b) {
+			return appSeries[a].name.localeCompare(appSeries[b].name);
+		});
+		
+		for (var k = 0; k < appIds.length; k++) {
+			var appId = appIds[k];
+			var appData = appSeries[appId];
+			series.push({
+				name: appData.name,
+				type: 'bar',
+				stack: 'apps',
+				data: appData.data,
+				barWidth: 20,
+				barMaxWidth: 30,
+				itemStyle: {
+					color: getAppColor(k)
+				}
+			});
+		}
+		
+		var textColor = window.getComputedStyle(document.body).color || '#ffffff';
+		
+		var option = {
+			title: {
+				text: '<%:Today Top Apps Statistics (24 Hours)%>',
+				left: 'center',
+				textStyle: {
+					color: textColor
+				}
+			},
+			tooltip: {
+				trigger: 'axis',
+				axisPointer: {
+					type: 'shadow'
+				},
+				formatter: function(params) {
+					var result = params[0].name + '<br/>';
+					var hasData = false;
+					for (var i = 0; i < params.length; i++) {
+						if (params[i].value > 0) {
+							var timeSeconds = params[i].value;
+							var timeStr = formatTimeDuration(timeSeconds);
+							result += params[i].marker + params[i].seriesName + ': ' + timeStr + '<br/>';
+							hasData = true;
+						}
+					}
+					return hasData ? result : '<%:No app usage in this period%>';
+				}
+			},
+			legend: {
+				data: series.map(function(s) { return s.name; }),
+				bottom: 10,
+				textStyle: {
+					color: textColor
+				},
+				type: 'scroll',
+				orient: 'horizontal',
+				left: 'center'
+			},
+			grid: {
+				left: '1%',
+				right: '1%',
+				bottom: '15%',
+				top: '10%',
+				containLabel: true
+			},
+			xAxis: {
+				type: 'category',
+				data: hours,
+				axisLabel: {
+					color: textColor,
+					rotate: 45,
+					interval: 0
+				},
+				axisLine: {
+					lineStyle: {
+						color: textColor
+					}
+				}
+			},
+			yAxis: {
+			type: 'value',
+			name: '<%:Duration%>',
+			minInterval: 60,
+			nameTextStyle: {
+				color: textColor
+			},
+			axisLabel: {
+				color: textColor,
+				formatter: function(value) {
+					if (value === 0) return '0';
+					var minutes = Math.round(value / 60);
+					if (minutes < 60) {
+						return minutes + '<%:m%>';
+					} else {
+						var hours = Math.round(minutes / 60);
+						return hours + '<%:h%>';
+					}
+				}
+			},
+			axisLine: {
+				lineStyle: {
+					color: textColor
+				}
+			},
+			splitLine: {
+				lineStyle: {
+					color: 'rgba(255, 255, 255, 0.1)'
+				}
+			}
+		},
+			series: series
+		};
+		
+		hourlyAppsChart.setOption(option);
+		setTimeout(function() {
+			if (hourlyAppsChart) {
+				hourlyAppsChart.resize();
+			}
+		}, 200);
+	}
+
+	function getAppColor(index) {
+		var colors = [
+			'#5470c6', '#91cc75', '#fac858', '#ee6666',
+			'#73c0de', '#3ba272', '#fc8452', '#9a60b4',
+			'#ea7ccc', '#ff9f7f', '#ffdb5c', '#c23531'
+		];
+		return colors[index % colors.length];
+	}
+
+	function formatTraffic(bytes) {
+		if (!bytes || bytes < 1024) {
+			return (bytes || 0) + ' B';
+		} else if (bytes < 1024 * 1024) {
+			return Math.round(bytes / 1024) + ' KB';
+		} else if (bytes < 1024 * 1024 * 1024) {
+			return Math.round(bytes / (1024 * 1024)) + ' MB';
+		} else {
+			return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+		}
+	}
+
+	function showTabContent(tabId) {
+		var tabs = document.querySelectorAll('.tab-body');
+		tabs.forEach(function(tab) {
+			tab.classList.remove('active');
+		});
+		var targetTab = document.getElementById(tabId);
+		if (targetTab) {
+			targetTab.classList.add('active');
+		}
+		
+		var tabItems = document.querySelectorAll('.tab-item');
+		tabItems.forEach(function(item) {
+			item.classList.remove('active');
+		});
+		event.target.classList.add('active');
+
+		if (tabId === 'tab1') {
+			stopVisitAutoRefresh();
+			loadUserBasicInfo();
+		}
+		if (tabId === 'tab2') {
+			stopVisitAutoRefresh();
+			loadAppVisitTime();
+		}
+		if (tabId === 'tab3') {
+			startVisitAutoRefresh();
+			loadVisitListData(visit_cur_page);
+		}
+		if (tabId === 'tab4' || tabId === 'tab5') {
+			stopVisitAutoRefresh();
+			loadHourlyStatsData();
+		}
+		
+		if (tabId === 'tab2') {
+			if (!appTimeChart && visit_time_data) {
+				var chartElement = document.getElementById('app_time_chart');
+				if (chartElement) {
+					appTimeChart = echarts.init(chartElement);
+					display_app_visit_view(visit_time_data);
+				}
+			} else if (appTimeChart) {
+				appTimeChart.resize();
+			}
+		}
+		
+		if (tabId === 'tab4' && hourlyStatsData && !hourlyTrafficChart) {
+			renderHourlyTrafficChart(hourlyStatsData);
+		} else if (tabId === 'tab4' && hourlyTrafficChart) {
+			hourlyTrafficChart.resize();
+		}
+		
+		if (tabId === 'tab5' && hourlyStatsData && !hourlyAppsChart) {
+			renderHourlyAppsChart(hourlyStatsData);
+		} else if (tabId === 'tab5' && hourlyAppsChart) {
+			hourlyAppsChart.resize();
+		}
+		
+	}
+//]]></script>
+
+<div class="cbi-map">
+	<div class="cbi-section">
+		<div style="margin-bottom: 20px;">
+			<a href="<%=url("admin/fwx_user/list")%>" class="cbi-button cbi-button-back"><%:Back to User List%></a>
+		</div>
+		
+		<div style="background-color: #2d2d2d; color: #ffffff; padding: 20px; border-radius: 5px;">
+			<h4 style="margin: 0 0 20px 0; color: #fff;"><%:User Detail%>(<span id="device-title-mac">--</span>)</h4>
+			
+			<ul class="tab-list">
+				<li class="tab-item active" onclick="showTabContent('tab1')"><%:Basic Info%></li>
+				<li class="tab-item" onclick="showTabContent('tab2')"><%:App Statistics%></li>
+				<li class="tab-item" onclick="showTabContent('tab4')"><%:Today Traffic%></li>
+				<li class="tab-item" onclick="showTabContent('tab5')"><%:Today Top Apps%></li>
+				<li class="tab-item" onclick="showTabContent('tab6')" style="display:none"><%:Online/Offline Records%></li>
+				<li class="tab-item" onclick="showTabContent('tab3')"><%:Visit Records%></li>
+			</ul>
+
+			<div id="tab1" class="tab-body active">
+				<div style="padding: 20px;">
+					<table class="table cbi-section-table" style="width: 100%;">
+						<tr class="tr">
+							<td class="td" style="width: 120px; font-weight: bold;"><%:MAC Address%></td>
+							<td class="td" id="basic_info_mac">--</td>
+							<td class="td" style="width: 120px; font-weight: bold;"><%:IP Address%></td>
+							<td class="td" id="basic_info_ip">--</td>
+						</tr>
+						<tr class="tr">
+							<td class="td" style="font-weight: bold;"><%:Remark%></td>
+							<td class="td" id="basic_info_nickname">--</td>
+							<td class="td" style="font-weight: bold;"><%:Hostname%></td>
+							<td class="td" id="basic_info_hostname">--</td>
+						</tr>
+						<tr class="tr">
+							<td class="td" style="font-weight: bold;"><%:Today Traffic%></td>
+							<td class="td" id="basic_info_traffic" style="cursor: help;">--</td>
+							<td class="td" style="font-weight: bold;"><%:Today Internet Duration%></td>
+							<td class="td" id="basic_info_online_time">--</td>
+						</tr>
+						<tr class="tr">
+							<td class="td" style="font-weight: bold;"><%:Today Online Duration%></td>
+							<td class="td" id="basic_info_online_duration">--</td>
+							<td class="td" style="font-weight: bold;"><%:Online Status%></td>
+							<td class="td" id="basic_info_status">--</td>
+						</tr>
+					</table>
+				</div>
+			</div>
+
+			<div id="tab2" class="tab-body">
+				<div class="pie-chart">
+					<div id="app_time_chart" style="width:100%;height: 350px;">
+					</div>
+				</div>
+			</div>
+
+			<div id="tab4" class="tab-body">
+				<div class="bar-chart">
+					<div id="hourly_traffic_chart" style="width:100%;height: 400px;"></div>
+				</div>
+			</div>
+
+			<div id="tab5" class="tab-body">
+				<div class="bar-chart">
+					<div id="hourly_apps_chart" style="width:100%;height: 400px;"></div>
+				</div>
+			</div>
+
+			<div id="tab6" class="tab-body" style="display:none">
+				<div style="padding: 20px;">
+					<table class="table cbi-section-table" style="width: 100%;">
+						<thead>
+							<tr class="tr table-titles">
+								<th class="th" style="width: 80px;"><%:Type%></th>
+								<th class="th" style="width: 180px;"><%:Time%></th>
+								<th class="th" style="width: 200px;"><%:Duration%></th>
+							</tr>
+						</thead>
+						<tbody id="online_offline_records_tbody">
+							<tr class="tr">
+								<td class="td" colspan="3" style="text-align: center;"><%:Loading...%></td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<div id="tab3" class="tab-body">
+				<div style="max-height: 600px; overflow-y: auto;padding-right: 20px;">
+					<table class="table cbi-section-table" id="visit_list_table">
+						<tr class="tr table-titles">
+							<th class="th">
+								<%:App Name%>
+							</th>
+							<th class="th">
+								<%:First Visit%>
+							</th>
+							<th class="th">
+								<%:Last Visit%>
+							</th>
+							<th class="th">
+								<%:Duration%>
+							</th>
+							<th class="th">
+								<%:Online Status%>
+							</th>
+							<th class="th">
+								<%:Filter Status%>
+							</th>
+						</tr>
+						<tr class="tr">
+							<td class="td" colspan="6"><em><br />
+									<%:Collecting data...%>
+								</em></td>
+						</tr>
+					</table>
+				</div>
+				<div id="visit_pagination" style="margin-top: 20px;"></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<style>
+	.tab-container {
+		margin-top: 20px;
+	}
+	.tab-list {
+		display: flex;
+		list-style-type: none;
+		padding: 0;
+		margin: 0;
+		border-bottom: 1px solid #444;
+	}
+	.tab-item {
+		padding: 3px 16px;
+		cursor: pointer;
+		border: 1px solid #444;
+		border-bottom: none;
+		background-color: #1e1e1e;
+		border-radius: 5px 5px 0 0;
+		margin-right: 6px;
+		transition: background-color 0.3s ease;
+		color: #ccc;
+	}
+	.tab-item.active {
+		font-weight: bold;
+		background-color: #2d2d2d;
+		color: #fff;
+	}
+	.tab-item:hover {
+		background-color: #333;
+	}
+
+	.tab-body {
+		margin-top: 5px;
+		display: none;
+		padding: 5px;
+	}
+	.tab-body.active {
+		display: block;
+	}
+
+	.pie-chart {
+		width: 100%;
+		max-width: 1200px;
+	}
+	.bar-chart {
+		width: 100%;
+		max-width: 1200px;
+	}
+</style>
+
+<script type="text/javascript">
+	if (mac) {
+		var titleMac = document.getElementById('device-title-mac');
+		if (titleMac) {
+			titleMac.textContent = mac;
+		}
+	}
+</script>
+
