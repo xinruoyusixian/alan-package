@@ -35,7 +35,7 @@ a control panel for subweb and subconverter
 
 [UPX 4.2.4](https://github.com/upx/upx/releases/tag/v4.2.4)
 <br>
-[asdlokj1qpi233/subconverter](https://github.com/asdlokj1qpi233/subconverter/actions/runs/17318035053)
+[asdlokj1qpi233/subconverter](https://github.com/asdlokj1qpi233/subconverter/actions/runs/20145396074)
 ```bash
 ./upx -9 --lzma ./subconverter
 ```
