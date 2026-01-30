@@ -17,6 +17,12 @@ msgstr "APP统计"
 msgid "Today Traffic"
 msgstr "今日流量"
 
+msgid "Today Upstream Traffic"
+msgstr "今日上行流量"
+
+msgid "Today Downstream Traffic"
+msgstr "今日下行流量"
+
 msgid "Today Top Apps"
 msgstr "今日常用APP"
 

@@ -55,12 +55,18 @@
 		if (!mac) return;
 		
 		loadUserBasicInfo();
-		
-		loadAppVisitTime();
-
-		loadHourlyStatsData();
-
-		loadVisitListData(visit_cur_page);
+	
+		var activeTab = document.querySelector('.tab-body.active');
+		if (activeTab) {
+			var tabId = activeTab.id;
+			if (tabId === 'tab-app-duration') {
+				loadAppVisitTime();
+			} else if (tabId === 'tab-traffic-statistics' || tabId === 'tab-app-ranking') {
+				loadHourlyStatsData();
+			} else if (tabId === 'tab-visit-records') {
+				loadVisitListData(visit_cur_page);
+			}
+		}
 	}
 	
 	function loadUserBasicInfo() {
@@ -79,24 +85,24 @@
 		
 		document.getElementById('basic_info_mac').textContent = user.mac || '--';
 		document.getElementById('basic_info_ip').textContent = user.ip || '--';
+		var ipv6 = user.ipv6 || '';
+		if (!ipv6 || ipv6 === '::' || ipv6.trim() === '') {
+			ipv6 = '--';
+		}
+		document.getElementById('basic_info_ipv6').textContent = ipv6;
 		document.getElementById('basic_info_nickname').textContent = user.nickname || '--';
 		document.getElementById('basic_info_hostname').textContent = user.hostname || '--';
-		
-		var todayUpBytes = user.today_up_bytes || 0;
-		var todayDownBytes = user.today_down_bytes || 0;
-		var totalTraffic = todayUpBytes + todayDownBytes;
-		var upTrafficStr = formatTraffic(todayUpBytes);
-		var downTrafficStr = formatTraffic(todayDownBytes);
-		var totalTrafficStr = formatTraffic(totalTraffic);
-		var trafficElement = document.getElementById('basic_info_traffic');
-		trafficElement.textContent = totalTrafficStr;
-		trafficElement.setAttribute('title', '<%:Upstream%>: ' + upTrafficStr + '\n<%:Downstream%>: ' + downTrafficStr);
 		
 		var todayOnlineTime = user.today_online_time || 0;
 		document.getElementById('basic_info_online_time').textContent = get_display_time(todayOnlineTime);
 		
 		var todayActiveTime = user.today_active_time || 0;
 		document.getElementById('basic_info_active_time').textContent = get_display_time(todayActiveTime);
+		
+		var todayUpBytes = user.today_up_bytes || 0;
+		var todayDownBytes = user.today_down_bytes || 0;
+		document.getElementById('basic_info_up_bytes').textContent = formatTraffic(todayUpBytes);
+		document.getElementById('basic_info_down_bytes').textContent = formatTraffic(todayDownBytes);
 		
 		var statusElement = document.getElementById('basic_info_status');
 		if (user.online == 1) {
@@ -108,6 +114,11 @@
 
 	function loadAppVisitTime() {
 		if (!mac) return;
+		var tabAppDuration = document.getElementById('tab-app-duration');
+		var isVisible = tabAppDuration && (tabAppDuration.classList.contains('active') || window.getComputedStyle(tabAppDuration).display !== 'none');
+		if (!isVisible) {
+			return;
+		}
 		new XHR().get("<%=url('admin/fwx/dev_visit_time')%>/" + mac, null,
 			function (x, st) {
 				visit_time_data = st;
@@ -119,8 +130,8 @@
 	function startVisitAutoRefresh() {
 		if (visit_refresh_timer) return;
 		visit_refresh_timer = window.setInterval(function () {
-			var tab3 = document.getElementById('tab3');
-			if (!tab3 || !tab3.classList.contains('active')) return;
+			var tabVisitRecords = document.getElementById('tab-visit-records');
+			if (!tabVisitRecords || !tabVisitRecords.classList.contains('active')) return;
 			if (visit_refresh_inflight) return;
 			visit_refresh_inflight = true;
 			loadVisitListData(visit_cur_page, function () {
@@ -200,18 +211,20 @@
 	
 	function loadHourlyStatsData() {
 		if (!mac) return;
-		
+		var tabTrafficStatistics = document.getElementById('tab-traffic-statistics');
+		var tabAppRanking = document.getElementById('tab-app-ranking');
+		var isVisible = (tabTrafficStatistics && tabTrafficStatistics.classList.contains('active')) || (tabAppRanking && tabAppRanking.classList.contains('active'));
+		if (!isVisible) {
+			return;
+		}
 		new XHR().get("<%=url('admin/fwx/get_hourly_stats')%>/" + mac, null,
 			function (x, st) {
-				console.log("hourly_stats_data = ", st);
 				if (st && st.hourly_stats) {
 					hourlyStatsData = st.hourly_stats;
-					var tab4 = document.getElementById('tab4');
-					var tab5 = document.getElementById('tab5');
-					if (tab4 && tab4.classList.contains('active')) {
+					if (tabTrafficStatistics && tabTrafficStatistics.classList.contains('active')) {
 						renderHourlyTrafficChart(hourlyStatsData);
 					}
-					if (tab5 && tab5.classList.contains('active')) {
+					if (tabAppRanking && tabAppRanking.classList.contains('active')) {
 						renderHourlyAppsChart(hourlyStatsData);
 					}
 				}
@@ -253,8 +266,8 @@
 			return;
 		}
 		
-		var tab2 = document.getElementById('tab2');
-		var isVisible = tab2 && (tab2.classList.contains('active') || window.getComputedStyle(tab2).display !== 'none');
+		var tabAppDuration = document.getElementById('tab-app-duration');
+		var isVisible = tabAppDuration && (tabAppDuration.classList.contains('active') || window.getComputedStyle(tabAppDuration).display !== 'none');
 		
 		if (!appTimeChart) {
 			if (!isVisible) {
@@ -267,7 +280,7 @@
 			return;
 		}
 		
-		var themeTextColor = '#c9d1d9'; // 默认值
+		var themeTextColor = '#c9d1d9'; 
 		try {
 			var bodyStyle = window.getComputedStyle(document.body);
 			themeTextColor = bodyStyle.color || themeTextColor;
@@ -275,18 +288,18 @@
 		}
 		
 		var palette = [
-			'#34d399',  // emerald-400 - 柔和的青绿色
-			'#22c55e',  // green-500 - 保持原有绿色
-			'#06b6d4',  // cyan-500 - 保持原有青色
-			'#60a5fa',  // blue-400 - 柔和的蓝色
-			'#a78bfa',  // violet-400 - 柔和的紫色
-			'#f472b6',  // pink-400 - 柔和的粉色
-			'#fb923c',  // orange-400 - 柔和的橙色
-			'#fbbf24',  // amber-400 - 柔和的琥珀色
-			'#10b981',  // emerald-500 - 备用绿色
-			'#3b82f6',  // blue-500 - 备用蓝色
-			'#8b5cf6',  // violet-500 - 深紫色
-			'#ec4899'   // pink-500 - 深粉色
+			'#34d399',
+			'#22c55e',  
+			'#06b6d4',  
+			'#60a5fa', 
+			'#a78bfa',
+			'#f472b6',  
+			'#fb923c',
+			'#fbbf24', 
+			'#10b981', 
+			'#3b82f6', 
+			'#8b5cf6', 
+			'#ec4899'  
 		];
 		
 		var total_time = 0
@@ -309,14 +322,13 @@
 				app_stat_array.push(app_obj);
 			}
 		}
-		console.log("hello")
 		var total_time_str = get_display_time(total_time);
 		var option = {
 			backgroundColor: 'transparent',
-			animation: false,  // 禁用动画
+			animation: true,  
 			color: palette,
 			textStyle: {
-				color: themeTextColor  // 使用主题文字颜色
+				color: themeTextColor  
 			},
 			grid:{
 			},
@@ -325,7 +337,7 @@
 					text: "<%:App Time Statistics%>",
 					textStyle: {
 						fontSize: 16,
-						color: themeTextColor  // 使用主题文字颜色
+						color: themeTextColor  
 					},
 					left: "2%"
 				},
@@ -334,11 +346,11 @@
 					subtext: total_time_str,
 					textStyle: {
 						fontSize: 15,
-						color: themeTextColor  // 使用主题文字颜色
+						color: themeTextColor  
 					},
 					subtextStyle: {
 						fontSize: 15,
-						color: themeTextColor  // 使用主题文字颜色
+						color: themeTextColor 
 					},
 					textAlign: "center",
 					x: '34.5%',
@@ -362,7 +374,7 @@
 				align: 'left',
 				top: 'middle',
 				textStyle: {
-					color: themeTextColor  // 使用主题文字颜色
+					color: themeTextColor  
 				},
 				height: 250
 			},
@@ -371,7 +383,7 @@
 					name: "<%:Visit Time%>",
 					type: 'pie',
 					radius: ['58%', '70%'],
-					center: ['35%', '50%'], // 饼图的中心位置,调整离开左侧的距离
+					center: ['35%', '50%'], 
 					clockwise: false,
 					avoidLabelOverlap: true,
 					itemStyle: {
@@ -415,7 +427,6 @@
 				visit_total_num = st.total_num || 0;
 				visit_total_page = st.total_page || 1;
 				visit_cur_page = st.page || 1;
-				console.log("visit_list_data = " + visit_list_data);
 				render_visit_list_table(visit_list_data);
 				render_visit_pagination();
 				if (typeof cb === 'function') cb();
@@ -427,7 +438,6 @@
 		var tb = document.getElementById('visit_list_table');
 		var visit_list = data.list;
 		if (visit_list && tb) {
-			/* clear all rows */
 			while (tb.rows.length > 1)
 				tb.deleteRow(1);
 			for (var i = 0; i < visit_list.length; i++) {
@@ -578,8 +588,8 @@
 			var stat = sortedStats[i];
 			hours.push(stat.hour + ':00');
 			if (stat.traffic) {
-				upBytes.push(Math.round(stat.traffic.up_bytes / (1024 * 1024))); // 转换为MB
-				downBytes.push(Math.round(stat.traffic.down_bytes / (1024 * 1024))); // 转换为MB
+				upBytes.push(Math.round(stat.traffic.up_bytes / (1024 * 1024))); 
+				downBytes.push(Math.round(stat.traffic.down_bytes / (1024 * 1024))); 
 			} else {
 				upBytes.push(0);
 				downBytes.push(0);
@@ -589,6 +599,7 @@
 		var textColor = window.getComputedStyle(document.body).color || '#ffffff';
 		
 		var option = {
+			animation: true,  
 			title: {
 				text: '<%:Today Traffic Statistics (24 Hours)%>',
 				left: 'center',
@@ -606,7 +617,7 @@
 					for (var i = 0; i < params.length; i++) {
 						var param = params[i];
 						var value = param.value;
-						var totalBytes = value * 1024 * 1024; // MB转回字节
+						var totalBytes = value * 1024 * 1024;
 						var formatted = formatTraffic(totalBytes);
 						result += param.seriesName + ': ' + formatted + '<br/>';
 					}
@@ -782,6 +793,7 @@
 		var textColor = window.getComputedStyle(document.body).color || '#ffffff';
 		
 		var option = {
+			animation: true,  
 			title: {
 				text: '<%:Today Top Apps Statistics (24 Hours)%>',
 				left: 'center',
@@ -918,45 +930,58 @@
 		});
 		event.target.classList.add('active');
 
-		if (tabId === 'tab1') {
+		if (tabId === 'tab-user-info') {
 			stopVisitAutoRefresh();
 			loadUserBasicInfo();
 		}
-		if (tabId === 'tab2') {
+		if (tabId === 'tab-app-duration') {
 			stopVisitAutoRefresh();
-			loadAppVisitTime();
-		}
-		if (tabId === 'tab3') {
-			startVisitAutoRefresh();
-			loadVisitListData(visit_cur_page);
-		}
-		if (tabId === 'tab4' || tabId === 'tab5') {
-			stopVisitAutoRefresh();
-			loadHourlyStatsData();
-		}
-		
-		if (tabId === 'tab2') {
-			if (!appTimeChart && visit_time_data) {
+			if (!appTimeChart) {
 				var chartElement = document.getElementById('app_time_chart');
 				if (chartElement) {
 					appTimeChart = echarts.init(chartElement);
-					display_app_visit_view(visit_time_data);
 				}
-			} else if (appTimeChart) {
-				appTimeChart.resize();
+			}
+			if (visit_time_data && visit_time_data.length > 0) {
+				display_app_visit_view(visit_time_data);
+			} else {
+				loadAppVisitTime();
+			}
+			if (appTimeChart) {
+				setTimeout(function() {
+					appTimeChart.resize();
+				}, 100);
 			}
 		}
-		
-		if (tabId === 'tab4' && hourlyStatsData && !hourlyTrafficChart) {
-			renderHourlyTrafficChart(hourlyStatsData);
-		} else if (tabId === 'tab4' && hourlyTrafficChart) {
-			hourlyTrafficChart.resize();
+		if (tabId === 'tab-visit-records') {
+			startVisitAutoRefresh();
+			loadVisitListData(visit_cur_page);
 		}
-		
-		if (tabId === 'tab5' && hourlyStatsData && !hourlyAppsChart) {
-			renderHourlyAppsChart(hourlyStatsData);
-		} else if (tabId === 'tab5' && hourlyAppsChart) {
-			hourlyAppsChart.resize();
+		if (tabId === 'tab-traffic-statistics') {
+			stopVisitAutoRefresh();
+			if (hourlyStatsData && hourlyStatsData.length > 0) {
+				renderHourlyTrafficChart(hourlyStatsData);
+			} else {
+				loadHourlyStatsData();
+			}
+			if (hourlyTrafficChart) {
+				setTimeout(function() {
+					hourlyTrafficChart.resize();
+				}, 100);
+			}
+		}
+		if (tabId === 'tab-app-ranking') {
+			stopVisitAutoRefresh();
+			if (hourlyStatsData && hourlyStatsData.length > 0) {
+				renderHourlyAppsChart(hourlyStatsData);
+			} else {
+				loadHourlyStatsData();
+			}
+			if (hourlyAppsChart) {
+				setTimeout(function() {
+					hourlyAppsChart.resize();
+				}, 100);
+			}
 		}
 		
 	}
@@ -972,65 +997,71 @@
 			<h4 style="margin: 0 0 20px 0; color: inherit;"><%:User Detail%>(<span id="device-title-mac">--</span>)</h4>
 			
 			<ul class="tab-list">
-				<li class="tab-item active" onclick="showTabContent('tab1')"><%:Basic Info%></li>
-				<li class="tab-item" onclick="showTabContent('tab2')"><%:App Statistics%></li>
-				<li class="tab-item" onclick="showTabContent('tab4')"><%:Today Traffic%></li>
-				<li class="tab-item" onclick="showTabContent('tab5')"><%:Today Top Apps%></li>
-				<li class="tab-item" onclick="showTabContent('tab6')" style="display:none"><%:Online/Offline Records%></li>
-				<li class="tab-item" onclick="showTabContent('tab3')"><%:Visit Records%></li>
+				<li class="tab-item active" onclick="showTabContent('tab-user-info')"><%:Basic Info%></li>
+				<li class="tab-item" onclick="showTabContent('tab-app-duration')"><%:App Statistics%></li>
+				<li class="tab-item" onclick="showTabContent('tab-traffic-statistics')"><%:Today Traffic%></li>
+				<li class="tab-item" onclick="showTabContent('tab-app-ranking')"><%:Today Top Apps%></li>
+				<li class="tab-item" onclick="showTabContent('tab-online-offline-records')" style="display:none"><%:Online/Offline Records%></li>
+				<li class="tab-item" onclick="showTabContent('tab-visit-records')"><%:Visit Records%></li>
 			</ul>
 
-			<div id="tab1" class="tab-body active">
+			<div id="tab-user-info" class="tab-body active">
 				<div style="padding: 20px;">
 					<table class="table cbi-section-table" style="width: 100%;">
 						<tr class="tr">
 							<td class="td" style="width: 120px; font-weight: bold;"><%:MAC Address%></td>
 							<td class="td" id="basic_info_mac">--</td>
-							<td class="td" style="width: 120px; font-weight: bold;"><%:IP Address%></td>
-							<td class="td" id="basic_info_ip">--</td>
+							<td class="td" style="width: 120px; font-weight: bold;"><%:Online Status%></td>
+							<td class="td" id="basic_info_status">--</td>
 						</tr>
 						<tr class="tr">
-							<td class="td" style="font-weight: bold;"><%:Remark%></td>
-							<td class="td" id="basic_info_nickname">--</td>
 							<td class="td" style="font-weight: bold;"><%:Hostname%></td>
 							<td class="td" id="basic_info_hostname">--</td>
+							<td class="td" style="font-weight: bold;"><%:Remark%></td>
+							<td class="td" id="basic_info_nickname">--</td>
 						</tr>
 						<tr class="tr">
-							<td class="td" style="font-weight: bold;"><%:Today Traffic%></td>
-							<td class="td" id="basic_info_traffic" style="cursor: help;">--</td>
-							<td class="td" style="font-weight: bold;"><%:Today Online Duration%></td>
-							<td class="td" id="basic_info_online_time">--</td>
+							<td class="td" style="font-weight: bold;"><%:IP Address%></td>
+							<td class="td" id="basic_info_ip">--</td>
+							<td class="td" style="font-weight: bold;"><%:IPv6%></td>
+							<td class="td" id="basic_info_ipv6">--</td>
 						</tr>
 						<tr class="tr">
 							<td class="td" style="font-weight: bold;"><%:Today Internet Duration%></td>
 							<td class="td" id="basic_info_active_time">--</td>
-							<td class="td" style="font-weight: bold;"><%:Online Status%></td>
-							<td class="td" id="basic_info_status">--</td>
+							<td class="td" style="font-weight: bold;"><%:Today Online Duration%></td>
+							<td class="td" id="basic_info_online_time">--</td>
+						</tr>
+						<tr class="tr">
+							<td class="td" style="font-weight: bold;"><%:Today Upstream Traffic%></td>
+							<td class="td" id="basic_info_up_bytes">--</td>
+							<td class="td" style="font-weight: bold;"><%:Today Downstream Traffic%></td>
+							<td class="td" id="basic_info_down_bytes">--</td>
 						</tr>
 					</table>
 				</div>
 			</div>
 
-			<div id="tab2" class="tab-body">
+			<div id="tab-app-duration" class="tab-body">
 				<div class="pie-chart">
 					<div id="app_time_chart" style="width:100%;height: 350px;">
 					</div>
 				</div>
 			</div>
 
-			<div id="tab4" class="tab-body">
+			<div id="tab-traffic-statistics" class="tab-body">
 				<div class="bar-chart">
 					<div id="hourly_traffic_chart" style="width:100%;height: 400px;"></div>
 				</div>
 			</div>
 
-			<div id="tab5" class="tab-body">
+			<div id="tab-app-ranking" class="tab-body">
 				<div class="bar-chart">
 					<div id="hourly_apps_chart" style="width:100%;height: 400px;"></div>
 				</div>
 			</div>
 
-			<div id="tab6" class="tab-body" style="display:none">
+			<div id="tab-online-offline-records" class="tab-body" style="display:none">
 				<div style="padding: 20px;">
 					<table class="table cbi-section-table" style="width: 100%;">
 						<thead>
@@ -1049,7 +1080,7 @@
 				</div>
 			</div>
 
-			<div id="tab3" class="tab-body">
+			<div id="tab-visit-records" class="tab-body">
 				<div style="max-height: 600px; overflow-y: auto;padding-right: 20px;">
 					<table class="table cbi-section-table" id="visit_list_table">
 						<tr class="tr table-titles">
