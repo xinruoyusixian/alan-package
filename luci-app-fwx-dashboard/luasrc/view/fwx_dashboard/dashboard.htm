@@ -87,10 +87,10 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    .meter { height: 6px; background: rgba(0, 0, 0, 0.08); border-radius: 0; overflow: visible; position: relative; }
+    .meter { height: 6px; background: rgba(0, 0, 0, 0.08); border-radius: 999px; overflow: hidden; position: relative; }
     
     [data-darkmode="true"] .meter { background: #1f2933; }
-    .bar { height: 100%; width: 0; background: linear-gradient(90deg,#16a34a,#22c55e); position: relative; overflow: visible; border-radius: 0; }
+    .bar { height: 100%; width: 0; background: linear-gradient(90deg,#16a34a,#22c55e); position: relative; overflow: hidden; border-radius: 999px; }
     
     .sys-info-layout {
         display: grid;
@@ -595,7 +595,7 @@
                     <span id="cpu-temp-text">0°C</span>
                 </div>
                 <div class="meter">
-                    <div id="cpu-temp-bar" class="bar" style="background:linear-gradient(90deg,#f59e0b,#ef4444);"></div>
+                    <div id="cpu-temp-bar" class="bar" style="background:linear-gradient(90deg,#d8f7a7,#f88b58);"></div>
                 </div>
             </div>
             <div id="wifi-temp-container" style="display:none;">
@@ -604,7 +604,7 @@
                     <span id="wifi-temp-text">0°C</span>
                 </div>
                 <div class="meter">
-                    <div id="wifi-temp-bar" class="bar" style="background:linear-gradient(90deg,#f59e0b,#ef4444);"></div>
+                    <div id="wifi-temp-bar" class="bar" style="background:linear-gradient(90deg,#d8f7a7,#f88b58);"></div>
                 </div>
             </div>
         </div>
@@ -615,21 +615,21 @@
                     <span><%:Temp Space%></span>
                     <span id="storage-tmp-text">0%</span>
                 </div>
-                <div class="meter"><div id="storage-tmp-bar" class="bar" style="background:linear-gradient(90deg,#a78bfa,#8b5cf6);"></div></div>
+<div class="meter"><div id="storage-tmp-bar" class="bar" style="background:linear-gradient(90deg,#60a5fa,#2563eb);"></div></div>
             </div>
             <div style="margin-bottom:8px;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
                     <span><%:Disk Space%></span>
                     <span id="storage-root-text">0%</span>
                 </div>
-                <div class="meter"><div id="storage-root-bar" class="bar" style="background:linear-gradient(90deg,#a78bfa,#8b5cf6);"></div></div>
+<div class="meter"><div id="storage-root-bar" class="bar" style="background:linear-gradient(90deg,#60a5fa,#2563eb);"></div></div>
             </div>
             <div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
                     <span><%:Boot Space%></span>
                     <span id="storage-boot-text">0%</span>
                 </div>
-                <div class="meter"><div id="storage-boot-bar" class="bar" style="background:linear-gradient(90deg,#a78bfa,#8b5cf6);"></div></div>
+<div class="meter"><div id="storage-boot-bar" class="bar" style="background:linear-gradient(90deg,#60a5fa,#2563eb);"></div></div>
             </div>
         </div>
         <div class="card" id="active-url-card">
@@ -811,7 +811,7 @@
             }
         });
         
-        new XHR().get('<%=url("admin/dashboard_api/get_active_users")%>?count=10', null, function(x, data){
+        new XHR().get('<%=url("admin/dashboard_api/get_active_users")%>?count=8', null, function(x, data){
             if(data){
                 try {
                     var json = typeof data === 'string' ? JSON.parse(data) : data;
@@ -1076,7 +1076,7 @@
             updateInterfaceTraffic(traffic);
         }
         
-        updateActiveHosts(hosts.list || []);
+        updateActiveHosts((hosts.list || []).slice(0, 8));
     }
     
     function formatUptime(seconds){

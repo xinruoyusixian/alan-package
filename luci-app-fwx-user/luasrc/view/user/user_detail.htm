@@ -106,7 +106,11 @@
 		
 		var statusElement = document.getElementById('basic_info_status');
 		if (user.online == 1) {
-			statusElement.innerHTML = '<span style="color: #22c55e;"><%:Online%></span>';
+			if (user.active == 1) {
+				statusElement.innerHTML = '<span style="color: #22c55e;"><%:Active%></span>';
+			} else {
+				statusElement.innerHTML = '<span style="color: #3b82f6;"><%:Online%></span>';
+			}
 		} else {
 			statusElement.textContent = '<%:Offline%>';
 		}
@@ -1081,7 +1085,7 @@
 			</div>
 
 			<div id="tab-visit-records" class="tab-body">
-				<div style="max-height: 600px; overflow-y: auto;padding-right: 20px;">
+				<div style="max-height: 1000px; overflow-y: auto;padding-right: 20px;">
 					<table class="table cbi-section-table" id="visit_list_table">
 						<tr class="tr table-titles">
 							<th class="th">
@@ -1159,10 +1163,12 @@
 	.pie-chart {
 		width: 100%;
 		max-width: 1200px;
+		min-width: 600px;
 	}
 	.bar-chart {
 		width: 100%;
-		max-width: 1200px;
+		max-width: 1600px;
+		min-width: 600px;
 	}
 </style>
 
@@ -1174,4 +1180,3 @@
 		}
 	}
 </script>
-

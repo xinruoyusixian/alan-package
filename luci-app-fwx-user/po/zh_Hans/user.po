@@ -248,3 +248,6 @@ msgstr "访问时长"
 msgid "Filter Status"
 msgstr "过滤状态"
 
+
+msgid "Active"
+msgstr "活跃"

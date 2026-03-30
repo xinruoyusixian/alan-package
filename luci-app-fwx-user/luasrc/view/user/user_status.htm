@@ -218,9 +218,15 @@
 						display_url = current_url.substring(0, 20) + "...";
 					}
 					$tr.append(`<td class="td"><span title="${current_url}">${display_url}</span></td>`);
-					$tr.append(`<td class="td">${user_list[i].online == 1 
-						? `<span style="color: #22c55e;"><%:Online%></span>` 
-						: "<%:Offline%>"}</td>`);
+					var statusHtml = "<%:Offline%>";
+					if (user_list[i].online == 1) {
+						if (user_list[i].active == 1) {
+							statusHtml = '<span style="color: #22c55e;"><%:Active%></span>';
+						} else {
+							statusHtml = '<span style="color: #3b82f6;"><%:Online%></span>';
+						}
+					}
+					$tr.append('<td class="td">' + statusHtml + '</td>');
 					var macEncoded = encodeURIComponent(user_list[i].mac);
 					$tr.append(`
 						<td class="td">
@@ -584,7 +590,7 @@
 
 //]]></script>
 
-<div style="max-height: 750px; overflow-y: auto;padding-right: 20px;"> <!-- Added container with fixed height and overflow -->
+<div style="max-height: 1000px; overflow-y: auto;padding-right: 20px;"> 
 
 	<div class="cbi-section cbi-tblsection">
 
@@ -800,4 +806,3 @@
 	}
 
 </style>
-

@@ -69,9 +69,9 @@ function get_active_users()
 	
 	local count = luci.http.formvalue("count")
 	if count then
-		req_obj.data.count = tonumber(count) or 10
+		req_obj.data.count = tonumber(count) or 8
 	else
-		req_obj.data.count = 10
+		req_obj.data.count = 8
 	end
 	
 	local resp_obj = utl.ubus("fwx", "common", req_obj)
