@@ -71,3 +71,6 @@ msgstr "上传失败"
 msgid "File too large"
 msgstr "文件过大"
 
+
+msgid "No copyright information detected, please download the latest feature library from the official website and upgrade."
+msgstr "未检测到版权信息，请通过官网下载最新特征库升级"

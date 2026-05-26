@@ -34,6 +34,9 @@ msgstr "今日流量"
 msgid "Traffic Statistics"
 msgstr "流量统计"
 
+msgid "Real-time Traffic"
+msgstr "实时流量"
+
 msgid "Upload"
 msgstr "上传"
 
@@ -45,6 +48,9 @@ msgstr "活跃 APP"
 
 msgid "App Usage Distribution"
 msgstr "APP 使用时长分布"
+
+msgid "App Duration Statistics"
+msgstr "App时长统计"
 
 msgid "Last Hour"
 msgstr "近1小时"
@@ -112,6 +118,9 @@ msgstr "内存"
 msgid "Network"
 msgstr "网络"
 
+msgid "Port Status"
+msgstr "网口状态"
+
 msgid "Gateway"
 msgstr "网关"
 
@@ -163,6 +172,36 @@ msgstr "APP ID"
 msgid "Access Time"
 msgstr "访问时间"
 
+msgid "MAC Address"
+msgstr "MAC地址"
+
+msgid "Speed"
+msgstr "速率"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Duplex"
+msgstr "双工"
+
+msgid "Rx Bytes"
+msgstr "接收字节"
+
+msgid "Tx Bytes"
+msgstr "发送字节"
+
+msgid "Rx Packets"
+msgstr "接收包数"
+
+msgid "Tx Packets"
+msgstr "发送包数"
+
+msgid "Rx Error Packets"
+msgstr "接收错误包数"
+
+msgid "Tx Error Packets"
+msgstr "发送错误包数"
+
 msgid "Source IP"
 msgstr "源IP地址"
 
@@ -186,3 +225,18 @@ msgstr "IP地址"
 
 msgid "Storage Space"
 msgstr "磁盘空间"
+
+msgid "Network Tools"
+msgstr "网络工具"
+
+msgid "Games"
+msgstr "游戏中心"
+
+msgid "Advanced Settings"
+msgstr "高级设置"
+
+msgid "App Center"
+msgstr "应用中心"
+
+msgid "System Monitor"
+msgstr "系统监控"

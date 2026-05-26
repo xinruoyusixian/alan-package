@@ -153,6 +153,7 @@ var classListLoaded = false;
 		if (status === 200) return '<%:Update the feature file successfully%>';
 		if (status === 401) return '<%:Failed to update feature file, format error%>';
 		if (status === 402) return '<%:Failed to update feature file%> (<%:File too large%>)';
+		if (status === 403) return '<%:No copyright information detected, please download the latest feature library from the official website and upgrade.%>';
 		if (status === 1) return '<%:Updating, please wait...%>';
 		return '<%:Failed to update feature file%>';
 	}
@@ -316,4 +317,3 @@ var classListLoaded = false;
 		}, 100);
 	}
 </script>
-

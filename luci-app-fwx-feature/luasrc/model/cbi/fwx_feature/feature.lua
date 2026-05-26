@@ -57,6 +57,29 @@ local function get_dir_size(dir_path)
     return 0
 end
 
+local function validate_feature_copyright_line(file_path)
+    local f = io.open(file_path, "r")
+    if not f then
+        return false
+    end
+
+    local line_num = 0
+    for line in f:lines() do
+        line_num = line_num + 1
+        if line_num > 20 then
+            break
+        end
+        local lower_line = string.lower(line or "")
+        if string.find(lower_line, "copyright(c)", 1, true) then
+            f:close()
+            return string.find(lower_line, "www.openappfilter.com", 1, true) ~= nil
+        end
+    end
+
+    f:close()
+    return false
+end
+
 http.setfilehandler(function(meta, chunk, eof)
     local feature_file = "/etc/fwxd/feature.cfg"
     local f_format = "v3.0"
@@ -114,8 +137,8 @@ http.setfilehandler(function(meta, chunk, eof)
             os.execute("rm /tmp/upload/* -fr")
             return
         end
-        local version_line = fd2:read("*l")
-        local format_line = fd2:read("*l")
+        local version_line = fd2:read("*l") or ""
+        local format_line = fd2:read("*l") or ""
         fd2:close()
         local ret = string.match(version_line, "#version")
         if ret ~= nil then
@@ -125,6 +148,12 @@ http.setfilehandler(function(meta, chunk, eof)
             if not string.match(f_format, format) then
                 log("format mismatch: got " .. f_format .. ", expected " .. format)
                 write_status(401)
+                os.execute("rm /tmp/upload/* -fr")
+                return
+            end
+            if not validate_feature_copyright_line("/tmp/upload/feature.cfg") then
+                log("copyright validation failed: no Copyright(c) in first 20 lines or domain mismatch")
+                write_status(403)
                 os.execute("rm /tmp/upload/* -fr")
                 return
             end
@@ -179,4 +208,3 @@ elseif luci.http.formvalue("download") then
 end
 
 return m
-

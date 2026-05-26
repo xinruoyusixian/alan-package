@@ -11,6 +11,16 @@
         --chart-split-line-dashed-color: rgba(0, 0, 0, 0.15);
         --chart-tooltip-bg: rgba(255, 255, 255, 0.95);
         --chart-tooltip-text: #333333;
+        --temp-bar-default-gradient: linear-gradient(90deg,#d9eefc,#ff9800);
+        --temp-space-bar-gradient: linear-gradient(90deg,#22c4df,#4ea6f6);
+        --storage-bar-gradient: linear-gradient(90deg,#1fc2de,#4ca6fb);
+        --storage-bar-shadow: 0 0 10px rgba(66, 214, 255, 0.34);
+    }
+
+    [data-darkmode="true"] {
+        --temp-space-bar-gradient: linear-gradient(90deg,#a1ecff,#abd5ff);
+        --storage-bar-gradient: linear-gradient(90deg,#9deaff,#a6ceff);
+        --storage-bar-shadow: 0 0 14px rgba(151, 217, 255, 0.58);
     }
     
     .dash {
@@ -18,6 +28,7 @@
         grid-template-columns: 1fr 300px; 
         gap: 12px;
         padding: 8px;
+        box-sizing: border-box;
     }
     .card {
         border-radius: 8px;
@@ -51,6 +62,80 @@
         cursor: pointer;
         transition: all 0.2s;
     }
+    .app-stats-switch {
+        position: relative;
+        display: inline-block;
+    }
+    .app-stats-select-wrap {
+        display: none !important;
+    }
+    .app-stats-switch-btn {
+        min-width: 78px;
+        height: 22px;
+        font-size: 12px;
+        line-height: 20px;
+        border-radius: 4px;
+        padding: 0 18px 0 8px;
+        border: 1px solid rgba(148,163,184,.45);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+    }
+    .app-stats-switch-btn::after {
+        content: "";
+        position: absolute;
+        right: 7px;
+        top: 7px;
+        width: 6px;
+        height: 6px;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(45deg);
+        opacity: .75;
+    }
+    .app-stats-switch-menu {
+        display: none;
+        position: absolute;
+        right: 0;
+        top: 24px;
+        min-width: 78px;
+        z-index: 20;
+        border-radius: 4px;
+        border: 1px solid rgba(148,163,184,.45);
+        overflow: hidden;
+        background: #ffffff;
+        color: #1f2937;
+    }
+    .app-stats-switch.open .app-stats-switch-menu {
+        display: block;
+    }
+    .app-stats-switch-item {
+        display: block;
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        font-size: 12px;
+        padding: 4px 8px;
+        cursor: pointer;
+    }
+    .app-stats-switch-item:hover,
+    .app-stats-switch-item.active {
+        background: #e5e7eb;
+        color: #111827;
+    }
+    [data-darkmode="true"] .app-stats-switch-menu {
+        background: #1f2937;
+        color: #e5e7eb;
+        border-color: #374151;
+    }
+    [data-darkmode="true"] .app-stats-switch-item:hover,
+    [data-darkmode="true"] .app-stats-switch-item.active {
+        background: #374151;
+        color: #f3f4f6;
+    }
     .tab-btn:hover {
     }
     .tab-btn.active {
@@ -58,11 +143,15 @@
         border-color: rgba(59, 130, 246, 0.5);
         color: #3b82f6;
     }
-    .top-stats { display:grid; grid-template-columns: repeat(5,1fr); gap:8px; margin-bottom:10px; }
+    .top-stats { display:grid; grid-template-columns: repeat(5,1fr); gap:10px; margin-bottom:12px; }
     .top-stats .big { font-size:15px; font-weight:600; }
     .top-stats .top-stat-value {
-        font-size:15px;
-        font-weight:160;
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1.05;
+        letter-spacing: 0.01em;
+        color: #eaf2fb;
+        text-shadow: 0 1px 0 rgba(5, 12, 22, 0.35);
     }
     .mini {
         border-radius: 8px;
@@ -77,20 +166,373 @@
         font-size: 14px;
         font-weight: 600;
     }
-    .top-stats .mini > div:first-child {
-        font-size: 14px;
-        font-weight: 500;
+    .top-stats .mini {
+        --stat-bg-from: #212a33;
+        --stat-bg-mid: #1d2630;
+        --stat-bg-to: #1a222c;
+        --stat-icon-color: rgba(220, 233, 247, 0.90);
+        --stat-pattern-soft: rgba(255, 255, 255, 0.08);
+        --stat-pattern-line: rgba(255, 255, 255, 0.05);
+        --stat-overlay-a: rgba(255, 255, 255, 0.12);
+        --stat-overlay-b: rgba(255, 255, 255, 0.04);
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+        border-radius: 10px;
+        padding: 10px 12px 12px;
+        gap: 12px;
+        min-height: 94px;
+        border: 1px solid rgba(255, 255, 255, 0.30);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 8px 16px rgba(8, 15, 30, 0.22);
+        background: linear-gradient(135deg, var(--stat-bg-from) 0%, var(--stat-bg-mid) 22%, var(--stat-bg-to) 72%, var(--stat-bg-to) 100%);
+        color: rgba(248, 251, 255, 0.98);
+    }
+    .top-stats .mini::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+            radial-gradient(circle at 88% 18%, var(--stat-pattern-soft) 0%, rgba(255, 255, 255, 0) 42%),
+            repeating-linear-gradient(
+                132deg,
+                rgba(255, 255, 255, 0) 0px,
+                rgba(255, 255, 255, 0) 11px,
+                var(--stat-pattern-line) 11px,
+                var(--stat-pattern-line) 12px
+            );
+        opacity: 0.28;
+        z-index: 0;
+        pointer-events: none;
+    }
+    .top-stats .mini:nth-child(1) {
+        --stat-icon-color: #73a9d8;
+    }
+    .top-stats .mini:nth-child(2) {
+        --stat-icon-color: #b0a9f0;
+    }
+    .top-stats .mini:nth-child(3) {
+        --stat-icon-color: #b19571;
+    }
+    .top-stats .mini:nth-child(4) {
+        --stat-icon-color: #0ba13d;
+    }
+    .top-stats .mini:nth-child(5) {
+        --stat-icon-color: #76c7dd;
+    }
+    .top-stats .stat-head {
+        position: relative;
+        display: block;
+        min-height: 24px;
+        padding-right: 28px;
+    }
+    .top-stats .stat-label {
+        display: block;
+        font-size: 13px;
+        line-height: 24px;
+        padding-left: 0;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.86;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .top-stats .stat-icon {
+        position: absolute;
+        top: 2px;
+        right: 0;
+        left: auto;
+        width: 20px;
+        height: 20px;
+        display: block;
+        background-color: var(--stat-icon-color);
+        opacity: 0.90;
+        -webkit-mask: var(--stat-icon-url) center / contain no-repeat;
+        mask: var(--stat-icon-url) center / contain no-repeat;
+    }
+    .top-stats .icon-sphere { --stat-icon-url: url('/luci-static/resources/icons/sphere.svg'); }
+    .top-stats .icon-application { --stat-icon-url: url('/luci-static/resources/icons/application.svg'); }
+    .top-stats .icon-user { --stat-icon-url: url('/luci-static/resources/icons/user.svg'); }
+    .top-stats .icon-connect { --stat-icon-url: url('/luci-static/resources/icons/connect.svg'); }
+    .top-stats .icon-flow { --stat-icon-url: url('/luci-static/resources/icons/flow.svg'); }
+    .top-stats .mini::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+            linear-gradient(120deg, var(--stat-overlay-a) 0%, rgba(255, 255, 255, 0) 46%),
+            linear-gradient(180deg, var(--stat-overlay-b), rgba(255, 255, 255, 0));
+        opacity: 0.22;
+        z-index: 0;
+        pointer-events: none;
+    }
+    .top-stats .mini .top-stat-value {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .top-stats #internet-status {
+        font-size: 18px;
+        line-height: 1.2;
+    }
+    .top-stats #mini-traffic {
+        font-size: 22px;
+    }
+    .top-stats .mini > * {
+        position: relative;
+        z-index: 2;
+    }
+    [data-darkmode="true"] .top-stats .mini {
+        --stat-pattern-soft: rgba(184, 208, 236, 0.04);
+        --stat-pattern-line: rgba(194, 215, 241, 0.025);
+        --stat-overlay-a: rgba(210, 229, 255, 0.05);
+        --stat-overlay-b: rgba(210, 229, 255, 0.012);
+        border-color: rgba(255, 255, 255, 0.30);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.26), 0 8px 16px rgba(2, 8, 20, 0.26);
+    }
+    [data-darkmode="true"] .top-stats .stat-icon {
+        opacity: 0.80;
+    }
+    :root:not([data-darkmode="true"]) .top-stats .mini {
+        --stat-bg-from: #fbfcfd;
+        --stat-bg-mid: #f8fafc;
+        --stat-bg-to: #f5f7fa;
+        --stat-pattern-soft: rgba(84, 111, 139, 0.12);
+        --stat-pattern-line: rgba(84, 111, 139, 0.08);
+        --stat-overlay-a: rgba(255, 255, 255, 0.16);
+        --stat-overlay-b: rgba(255, 255, 255, 0.06);
+        color: #1f2d3d;
+        border-color: rgba(121, 141, 164, 0.34);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.46), 0 8px 14px rgba(20, 26, 36, 0.14);
+    }
+    :root:not([data-darkmode="true"]) .top-stats .top-stat-value {
+        color: #172638;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.32);
+    }
+    :root:not([data-darkmode="true"]) .top-stats .stat-label {
+        color: rgba(31, 45, 62, 0.86);
+        opacity: 0.88;
+    }
+    :root:not([data-darkmode="true"]) .top-stats .stat-icon {
+        opacity: 0.88;
+    }
+    :root:not([data-darkmode="true"]) .top-stats .mini:nth-child(1) {
+        --stat-icon-color: #4a7fbd;
+    }
+    :root:not([data-darkmode="true"]) .top-stats .mini:nth-child(2) {
+        --stat-icon-color: #5e628f;
+    }
+    :root:not([data-darkmode="true"]) .top-stats .mini:nth-child(3) {
+        --stat-icon-color: #8a6f51;
+    }
+    :root:not([data-darkmode="true"]) .top-stats .mini:nth-child(4) {
+        --stat-icon-color: #53799f;
+    }
+    :root:not([data-darkmode="true"]) .top-stats .mini:nth-child(5) {
+        --stat-icon-color: #548894;
     }
     .kv { display: grid; grid-template-columns: 90px 1fr; row-gap: 6px; column-gap: 4px; font-size: 13px; }
+    .mini-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+    .mini-title.with-help {
+        position: relative;
+        cursor: help;
+    }
+    .compact-mini {
+        gap: 8px;
+    }
+    .compact-kv {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .compact-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 7px 0;
+        border-radius: 0;
+        background: transparent;
+        border: none;
+    }
+    .compact-row::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 1px;
+        background: linear-gradient(
+            90deg,
+            rgba(148, 163, 184, 0) 0,
+            rgba(148, 163, 184, 0.18) 33%,
+            rgba(148, 163, 184, 0.18) 67%,
+            rgba(148, 163, 184, 0) 100%
+        );
+    }
+    [data-darkmode="true"] .compact-row {
+        background: transparent;
+    }
+    [data-darkmode="true"] .compact-row::after {
+        background: linear-gradient(
+            90deg,
+            rgba(120, 138, 162, 0) 0,
+            rgba(120, 138, 162, 0.22) 33%,
+            rgba(120, 138, 162, 0.22) 67%,
+            rgba(120, 138, 162, 0) 100%
+        );
+    }
+    .compact-kv .compact-row:last-child::after {
+        display: none;
+    }
+    .compact-label {
+        font-size: 12px;
+        opacity: 0.78;
+        white-space: nowrap;
+    }
+    .compact-value {
+        font-size: 14px;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    [data-darkmode="true"] .compact-label {
+        color: rgba(184, 199, 220, 0.78);
+    }
+    [data-darkmode="true"] .compact-value {
+        color: #dbe9fb;
+    }
+    [data-darkmode="true"] #sys-model {
+        color: #f2f8ff;
+        text-shadow: 0 0 0 rgba(0, 0, 0, 0.01);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: geometricPrecision;
+    }
+    #network-info .compact-value,
+    #sys-hostname,
+    #sys-model,
+    #sys-version,
+    #sys-kernel-version,
+    #sys-uptime {
+        max-width: 170px;
+    }
+    .env-row {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 2px 0;
+    }
+    .env-row + .env-row {
+        margin-top: 10px;
+    }
+    .env-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 13px;
+    }
+    .env-label {
+        font-weight: 600;
+        opacity: 0.86;
+    }
+    .env-value {
+        font-weight: 600;
+    }
+    #env-storage-card .env-label,
+    #env-storage-card .env-value {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: geometricPrecision;
+        opacity: 1;
+        letter-spacing: 0.1px;
+    }
+    [data-darkmode="true"] #env-storage-card .env-label {
+        color: rgba(215, 228, 244, 0.92);
+    }
+    [data-darkmode="true"] #env-storage-card .env-value {
+        color: #ecf6ff;
+    }
     #sys-model, #sys-cpu-model-name {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
     .meter { height: 6px; background: rgba(0, 0, 0, 0.08); border-radius: 999px; overflow: hidden; position: relative; }
-    
-    [data-darkmode="true"] .meter { background: #1f2933; }
+
+    [data-darkmode="true"] .meter { background: #141d2a; }
     .bar { height: 100%; width: 0; background: linear-gradient(90deg,#16a34a,#22c55e); position: relative; overflow: hidden; border-radius: 999px; }
+    #cpu-temp-bar {
+        background: var(--temp-bar-default-gradient);
+    }
+    #storage-overlay-bar {
+        background: var(--storage-bar-gradient);
+        box-shadow: var(--storage-bar-shadow);
+    }
+    #port-status-card {
+        gap: 8px;
+    }
+    .port-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+    }
+    .port-item {
+        position: relative;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        color: var(--text-color-medium, #6b7280);
+    }
+    .port-icon {
+        width: 34px;
+        height: 34px;
+        color: #6b7280;
+        background: currentColor;
+        -webkit-mask: url("<%=resource%>/icons/ethernet-port.svg") center / contain no-repeat;
+        mask: url("<%=resource%>/icons/ethernet-port.svg") center / contain no-repeat;
+    }
+    .port-item.port-up.port-speed-high .port-icon {
+        color: #f1d950;
+    }
+    .port-item.port-up.port-speed-mid .port-icon {
+        color: #18b12c;
+    }
+    .port-item.port-up.port-speed-low .port-icon {
+        color: #08ecec;
+    }
+    .port-name {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.1;
+    }
+    .port-speed {
+        font-size: 10px;
+        line-height: 1;
+        opacity: 0.78;
+    }
+    .port-empty {
+        color: var(--text-color-medium, #6b7280);
+        text-align: center;
+        padding: 8px 0 4px;
+    }
+    .port-item:hover .tooltip {
+        display: block;
+    }
     
     .sys-info-layout {
         display: grid;
@@ -150,7 +592,7 @@
     }
     
     [data-darkmode="true"] .circular-progress .progress-ring-bg {
-        stroke: rgba(255,255,255,0.1);
+        stroke: rgba(132, 153, 182, 0.22);
     }
     .circular-progress .progress-ring {
         fill: none;
@@ -202,6 +644,52 @@
     .list th:nth-child(7), .list td:nth-child(7) { width: 12%; } 
     .list th:nth-child(8), .list td:nth-child(8) { width: 22%; } 
     .right-col { display: grid; gap: 10px; align-content: start; }
+    .right-col .mini {
+        position: relative;
+        border-radius: 14px;
+        overflow: hidden;
+        padding-left: 13px;
+        padding-right: 13px;
+    }
+    #sys-info-card,
+    #network-card,
+    #port-status-card {
+        overflow: visible;
+    }
+    .right-col .mini-title {
+        font-weight: 400;
+    }
+    .right-col .compact-value {
+        font-weight: 400;
+    }
+    .right-col .env-label,
+    .right-col .env-value {
+        font-weight: 400;
+    }
+    .right-col .circular-progress-text {
+        font-weight: 400;
+    }
+    #sys-info-card .compact-kv {
+        gap: 0;
+    }
+    #sys-info-card .compact-row {
+        padding-top: 6px;
+        padding-bottom: 6px;
+    }
+    [data-darkmode="true"] .right-col .mini {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--border-color-medium);
+        box-shadow: none;
+    }
+    [data-darkmode="true"] .right-col .mini-title {
+        color: #e5eefc;
+    }
+    [data-darkmode="true"] #running-status-card .circular-progress-text {
+        color: #e6f0ff;
+    }
+    [data-darkmode="true"] #running-status-card .circular-progress-label {
+        color: rgba(221, 234, 250, 0.92);
+    }
     .spark { height: 70px; }
     .app-grid {
         display: grid;
@@ -236,17 +724,32 @@
         flex-direction: column;
         gap: 0;
         padding: 0;
-        height: 350px;
+        height: 385px;
         overflow: hidden;
         position: relative;
         justify-content: flex-start;
     }
     .active-url-item {
+        position: relative;
         display: flex;
         flex-direction: row;
         align-items: center;
         padding: 10px 12px;
-        border-bottom: 1px solid var(--border-color-low);
+    }
+    .active-url-item::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 1px;
+        background: linear-gradient(
+            90deg,
+            rgba(148, 163, 184, 0) 0,
+            rgba(148, 163, 184, 0.18) 33%,
+            rgba(148, 163, 184, 0.18) 67%,
+            rgba(148, 163, 184, 0) 100%
+        );
     }
     .active-url-item.slide-in {
         animation: slideInFromBottom 0.4s ease-out;
@@ -261,8 +764,17 @@
             opacity: 1;
         }
     }
-    .active-url-item:last-child {
-        border-bottom: none;
+    [data-darkmode="true"] .active-url-item::after {
+        background: linear-gradient(
+            90deg,
+            rgba(120, 138, 162, 0) 0,
+            rgba(120, 138, 162, 0.22) 33%,
+            rgba(120, 138, 162, 0.22) 67%,
+            rgba(120, 138, 162, 0) 100%
+        );
+    }
+    .active-url-item:last-child::after {
+        display: none;
     }
     .active-url-item {
         font-size: 12px;
@@ -282,9 +794,13 @@
         color: #22c55e;
     }
     .tooltip {
+        --tooltip-bg: rgba(20, 29, 41, 0.96);
+        --tooltip-border: rgba(118, 136, 160, 0.34);
+        --tooltip-label-color: rgba(194, 210, 228, 0.78);
+        --tooltip-value-color: rgba(229, 238, 250, 0.94);
         position: absolute;
-        background: rgba(60,60,60,0.9);
-        border: 1px solid rgba(255,255,255,0.2);
+        background: var(--tooltip-bg);
+        border: 1px solid var(--tooltip-border);
         border-radius: 8px;
         padding: 12px;
         min-width: 280px;
@@ -292,8 +808,15 @@
         line-height: 1.6;
         z-index: 1000;
         pointer-events: none;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        box-shadow: 0 10px 24px rgba(6, 12, 22, 0.40);
         display: none;
+    }
+    :root:not([data-darkmode="true"]) .tooltip {
+        --tooltip-bg: #ffffff;
+        --tooltip-border: rgba(151, 166, 183, 0.42);
+        --tooltip-label-color: rgba(90, 106, 124, 0.86);
+        --tooltip-value-color: rgba(32, 45, 62, 0.95);
+        box-shadow: 0 8px 20px rgba(40, 51, 66, 0.16);
     }
     
     .tooltip-top {
@@ -325,7 +848,7 @@
         position: absolute;
         top: 100%;
         border: 6px solid transparent;
-        border-top-color: rgba(60,60,60,0.9);
+        border-top-color: var(--tooltip-bg);
     }
     
     .tooltip-arrow-left::before {
@@ -357,7 +880,7 @@
         position: absolute;
         bottom: 100%;
         border: 6px solid transparent;
-        border-bottom-color: rgba(60,60,60,0.9);
+        border-bottom-color: var(--tooltip-bg);
     }
     
     .tooltip-bottom.tooltip-arrow-center::after {
@@ -380,12 +903,12 @@
         margin-bottom: 0;
     }
     .tooltip-label {
-        color: rgba(255,255,255,0.6);
+        color: var(--tooltip-label-color);
         min-width: 90px;
         margin-right: 8px;
     }
     .tooltip-value {
-        color: rgba(255,255,255,0.9);
+        color: var(--tooltip-value-color);
         flex: 1;
     }
     
@@ -425,7 +948,6 @@
         #pie-app-card, #bar-user-traffic-card {
             min-height: 350px;
         }
-        
         #pie-app-card .chart-container, #bar-user-traffic-card .chart-container {
             min-height: 300px;
             height: 300px;
@@ -440,8 +962,32 @@
             font-size: 16px;
         }
         
+        .top-stats .mini {
+            min-height: 84px;
+            padding: 9px 10px 10px;
+            gap: 9px;
+        }
+
+        .top-stats .stat-label {
+            font-size: 12px;
+            letter-spacing: 0.05em;
+        }
+
+        .top-stats .stat-icon {
+            width: 22px;
+            height: 22px;
+        }
+
         .top-stats .top-stat-value {
+            font-size: 20px;
+        }
+
+        .top-stats #internet-status {
             font-size: 15px;
+        }
+
+        .top-stats #mini-traffic {
+            font-size: 17px;
         }
         
         .main-grid {
@@ -458,6 +1004,10 @@
             padding: 12px 8px;
             font-size: 11px;
         }
+        .right-col .mini {
+            padding-left: 11px;
+            padding-right: 11px;
+        }
         
         .kv {
             grid-template-columns: 80px 1fr;
@@ -469,18 +1019,48 @@
 <div class="dash">
     <div>
         <div class="top-stats">
-            <div class="mini"><div><%:Internet Status%></div><div id="internet-status" class="top-stat-value" style="font-weight:600;"></div></div>
-            <div class="mini"><div><%:Online App%></div><div id="app-count" class="top-stat-value">0</div></div>
-            <div class="mini"><div><%:Online User%></div><div id="mini-online" class="top-stat-value">0</div></div>
-            <div class="mini"><div><%:Connections%></div><div id="mini-conn" class="top-stat-value">0</div></div>
-            <div class="mini"><div><%:Today Traffic%></div><div id="mini-traffic" class="top-stat-value">0MB</div></div>
+            <div class="mini">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Internet Status%></span>
+                    <span class="stat-icon icon-sphere" aria-hidden="true"></span>
+                </div>
+                <div id="internet-status" class="top-stat-value" style="font-weight:600;"></div>
+            </div>
+            <div class="mini">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Online App%></span>
+                    <span class="stat-icon icon-application" aria-hidden="true"></span>
+                </div>
+                <div id="app-count" class="top-stat-value">0</div>
+            </div>
+            <div class="mini">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Online User%></span>
+                    <span class="stat-icon icon-user" aria-hidden="true"></span>
+                </div>
+                <div id="mini-online" class="top-stat-value">0</div>
+            </div>
+            <div class="mini">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Connections%></span>
+                    <span class="stat-icon icon-connect" aria-hidden="true"></span>
+                </div>
+                <div id="mini-conn" class="top-stat-value">0</div>
+            </div>
+            <div class="mini">
+                <div class="stat-head">
+                    <span class="stat-label"><%:Today Traffic%></span>
+                    <span class="stat-icon icon-flow" aria-hidden="true"></span>
+                </div>
+                <div id="mini-traffic" class="top-stat-value">0MB</div>
+            </div>
         </div>
 
         <div class="main-grid">
             
 
             <div class="card full">
-                <h3 id="traffic-title"><%:Traffic Statistics%></h3>
+                <h3 id="traffic-title"><%:Real-time Traffic%></h3>
                 <div id="line-wan" class="chart-container"></div>
                 <div id="wan-realtime-rate" style="text-align: center; margin-top: 8px; font-size: 13px;">
                     <span><%:Upload%>:</span><span id="wan-up-rate">0 KB/s</span> 
@@ -488,16 +1068,18 @@
                 </div>
             </div>
             <div class="card full" id="active-app-card">
-                <h3><%:Active Apps%></h3>
+                <h3>正在访问</h3>
                 <div class="app-grid" id="active-apps"></div>
     </div>
             <div class="card" id="pie-app-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <h3 style="margin:0;"><%:App Usage Distribution%></h3>
-                    <div class="app-stats-tabs" style="display:flex; gap:8px;">
-                        <button type="button" id="tab-hourly" class="tab-btn" data-type="hourly"><%:Last Hour%></button>
-                        <button type="button" id="tab-daily" class="tab-btn active" data-type="daily"><%:Today%></button>
-                    </div>
+                    <h3 style="margin:0;"><%:App Duration Statistics%></h3>
+                    <span class="app-stats-select-wrap">
+                        <select id="app-stats-select" class="app-stats-select">
+                            <option value="hourly">近一小时</option>
+                            <option value="daily" selected>今日</option>
+                        </select>
+                    </span>
                 </div>
                 <div id="pie-app" class="chart-container"></div>
             </div>
@@ -519,30 +1101,47 @@
     </div>
 
     <div class="right-col">
-        <div class="mini">
-            <div style="font-weight:600; margin-bottom:6px;"><%:System Info%></div>
-            <div class="kv">
-                <div><%:Hostname%></div><div id="sys-hostname">--</div>
-                <div><%:Device Model%></div><div id="sys-model">--</div>
-                <div><%:CPU%></div><div id="sys-cpu-model-name">--</div>
-                <div><%:Firmware Version%></div><div id="sys-version">--</div>
-                <div><%:Kernel Version%></div><div id="sys-kernel-version">--</div>
-                <div><%:Uptime%></div><div id="sys-uptime">--</div>
-        
+        <div class="mini compact-mini" id="sys-info-card" style="position:relative;">
+            <div class="mini-title with-help" id="sysinfo-title"><%:System Info%></div>
+            <div id="sysinfo-tooltip" class="tooltip tooltip-left" style="display:none;"></div>
+            <div class="compact-kv">
+                <div class="compact-row">
+                    <span class="compact-label" id="sys-model-label"><%:Device Model%></span>
+                    <span class="compact-value" id="sys-model">--</span>
+                </div>
+                <div class="compact-row">
+                    <span class="compact-label"><%:Hostname%></span>
+                    <span class="compact-value" id="sys-hostname">--</span>
+                </div>
+                <div class="compact-row">
+                    <span class="compact-label"><%:Firmware Version%></span>
+                    <span class="compact-value" id="sys-version">--</span>
+                </div>
+                <div class="compact-row">
+                    <span class="compact-label"><%:Kernel Version%></span>
+                    <span class="compact-value" id="sys-kernel-version">--</span>
+                </div>
+                <div class="compact-row">
+                    <span class="compact-label"><%:Uptime%></span>
+                    <span class="compact-value" id="sys-uptime">--</span>
+                </div>
+            </div>
+            <div style="display:none;">
+                <span id="sys-cpu-model-name">--</span>
             </div>
         </div>
-        <div class="mini">
-            <div style="font-weight:600; margin-bottom:10px;"><%:Running Status%></div>
+        <div class="mini" id="running-status-card">
+            <div style="font-weight:400; margin-bottom:10px;"><%:Running Status%></div>
             
             <svg style="position:absolute; width:0; height:0;">
                 <defs>
                     <linearGradient id="cpuGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style="stop-color:#16a34a;stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:#22c55e;stop-opacity:1" />
+                        <stop offset="0%" style="stop-color:#26f7de;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#17d8ff;stop-opacity:1" />
                     </linearGradient>
                     <linearGradient id="memGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                        <stop offset="0%" style="stop-color:#74e3ff;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#56b9ff;stop-opacity:1" />
                     </linearGradient>
                 </defs>
             </svg>
@@ -570,66 +1169,50 @@
                 </div>
             </div>
         </div>
-        <div class="mini" style="position:relative;">
-            <div style="font-weight:600; margin-bottom:6px; position:relative; cursor:help;" id="network-title"><%:Network%></div>
-            <div id="network-tooltip" class="tooltip tooltip-top tooltip-arrow-left" style="display:none;"></div>
-            <div class="kv" id="network-info">
-                <div id="gw-mode-lan-ip-label">LAN IP</div><div id="gw-mode-lan-ip-value">192.168.1.1</div>
-                <div id="gw-mode-lan-ipv6-label" style="display:none;">LAN IPv6</div><div id="gw-mode-lan-ipv6-value" style="display:none;">-</div>
-                <div id="gw-mode-wan-ip-label">WAN IP</div><div id="gw-mode-wan-ip-value">100.64.1.23</div>
-                <div id="gw-mode-wan-ipv6-label" style="display:none;">WAN IPv6</div><div id="gw-mode-wan-ipv6-value" style="display:none;">-</div>
-                <div id="gw-mode-gateway-label"><%:Gateway%></div><div id="gw-mode-gateway-value">100.64.1.1</div>
-                <div id="gw-mode-dns-label"><%:DNS%></div><div id="gw-mode-dns-value">223.5.5.5 / 8.8.8.8</div>
-                <div id="bypass-mode-ip-label" style="display:none;">IP</div><div id="bypass-mode-ip-value" style="display:none;">192.168.1.1</div>
-                <div id="bypass-mode-ipv6-label" style="display:none;">IPv6</div><div id="bypass-mode-ipv6-value" style="display:none;">-</div>
-                <div id="bypass-mode-mask-label" style="display:none;"><%:Mask%></div><div id="bypass-mode-mask-value" style="display:none;">255.255.255.0</div>
-                <div id="bypass-mode-gateway-label" style="display:none;"><%:Gateway%></div><div id="bypass-mode-gateway-value" style="display:none;">192.168.1.1</div>
-                <div id="bypass-mode-dns-label" style="display:none;"><%:DNS%></div><div id="bypass-mode-dns-value" style="display:none;">223.5.5.5 / 8.8.8.8</div>
-            </div>
-        </div>
-        <div class="mini">
-            <div style="font-weight:600; margin-bottom:6px;"><%:Temperature%></div>
-            <div id="cpu-temp-container" style="margin-bottom:8px; display:none;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
-                    <span>CPU</span>
-                    <span id="cpu-temp-text">0°C</span>
+        <div class="mini compact-mini" id="network-card" style="position:relative;">
+            <div class="mini-title with-help" id="network-title"><%:Network%></div>
+            <div id="network-tooltip" class="tooltip tooltip-left" style="display:none;"></div>
+            <div class="compact-kv" id="network-info">
+                <div class="compact-row">
+                    <span class="compact-label">LAN</span>
+                    <span class="compact-value" id="network-lan-summary">--</span>
                 </div>
-                <div class="meter">
-                    <div id="cpu-temp-bar" class="bar" style="background:linear-gradient(90deg,#d8f7a7,#f88b58);"></div>
+                <div class="compact-row">
+                    <span class="compact-label">WAN</span>
+                    <span class="compact-value" id="network-wan-summary">--</span>
                 </div>
-            </div>
-            <div id="wifi-temp-container" style="display:none;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
-                    <span>WiFi</span>
-                    <span id="wifi-temp-text">0°C</span>
+                <div class="compact-row">
+                    <span class="compact-label"><%:Gateway%></span>
+                    <span class="compact-value" id="network-gateway-summary">--</span>
                 </div>
-                <div class="meter">
-                    <div id="wifi-temp-bar" class="bar" style="background:linear-gradient(90deg,#d8f7a7,#f88b58);"></div>
+                <div class="compact-row">
+                    <span class="compact-label"><%:DNS%></span>
+                    <span class="compact-value" id="network-dns-summary">--</span>
                 </div>
             </div>
         </div>
-        <div class="mini">
-            <div style="font-weight:600; margin-bottom:6px;"><%:Storage Space%></div>
-            <div style="margin-bottom:8px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
-                    <span><%:Temp Space%></span>
-                    <span id="storage-tmp-text">0%</span>
+        <div class="mini compact-mini" id="port-status-card">
+            <div class="mini-title"><%:Port Status%></div>
+            <div class="port-grid" id="port-status-grid"></div>
+        </div>
+        <div class="mini compact-mini" id="env-storage-card">
+            <div class="env-row">
+                <div class="env-head">
+                    <span class="env-label" id="env-primary-label"><%:Temperature%></span>
+                    <span class="env-value" id="cpu-temp-text">--</span>
                 </div>
-<div class="meter"><div id="storage-tmp-bar" class="bar" style="background:linear-gradient(90deg,#60a5fa,#2563eb);"></div></div>
+                <div class="meter">
+                    <div id="cpu-temp-bar" class="bar"></div>
+                </div>
             </div>
-            <div style="margin-bottom:8px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
-                    <span><%:Disk Space%></span>
-                    <span id="storage-root-text">0%</span>
+            <div class="env-row">
+                <div class="env-head">
+                    <span class="env-label"><%:Disk Space%></span>
+                    <span class="env-value" id="storage-overlay-text">--</span>
                 </div>
-<div class="meter"><div id="storage-root-bar" class="bar" style="background:linear-gradient(90deg,#60a5fa,#2563eb);"></div></div>
-            </div>
-            <div>
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px;">
-                    <span><%:Boot Space%></span>
-                    <span id="storage-boot-text">0%</span>
+                <div class="meter">
+                    <div id="storage-overlay-bar" class="bar"></div>
                 </div>
-<div class="meter"><div id="storage-boot-bar" class="bar" style="background:linear-gradient(90deg,#60a5fa,#2563eb);"></div></div>
             </div>
         </div>
         <div class="card" id="active-url-card">
@@ -659,7 +1242,7 @@
     var _OnlineUser = '<%:Online User%>';
     var _Connections = '<%:Connections%>';
     var _TodayTraffic = '<%:Today Traffic%>';
-    var _TrafficStatistics = '<%:Traffic Statistics%>';
+    var _RealtimeTraffic = '<%:Real-time Traffic%>';
     var _Upload = '<%:Upload%>';
     var _Download = '<%:Download%>';
     var _ActiveApps = '<%:Active Apps%>';
@@ -686,6 +1269,7 @@
     var _RunningStatus = '<%:Running Status%>';
     var _Memory = '<%:Memory%>';
     var _Network = '<%:Network%>';
+    var _PortStatus = '<%:Port Status%>';
     var _Gateway = '<%:Gateway%>';
     var _DNS = '<%:DNS%>';
     var _Mask = '<%:Mask%>';
@@ -704,6 +1288,15 @@
     var _AppID = '<%:App ID%>';
     var _AccessTime = '<%:Access Time%>';
     var _MACAddress = '<%:MAC Address%>';
+    var _Speed = '<%:Speed%>';
+    var _Status = '<%:Status%>';
+    var _Duplex = '<%:Duplex%>';
+    var _RxBytes = '<%:Rx Bytes%>';
+    var _TxBytes = '<%:Tx Bytes%>';
+    var _RxPackets = '<%:Rx Packets%>';
+    var _TxPackets = '<%:Tx Packets%>';
+    var _RxErrorPackets = '<%:Rx Error Packets%>';
+    var _TxErrorPackets = '<%:Tx Error Packets%>';
     var _SourceIP = '<%:Source IP%>';
     var _DestinationIP = '<%:Destination IP%>';
     var _Protocol = '<%:Protocol%>';
@@ -713,6 +1306,22 @@
     var _IPAddress = '<%:IP Address%>';
     
     function pct(v){ return Math.max(0, Math.min(100, Math.round(v))); }
+    function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+    function getRootCssVar(name, defaultValue){
+        var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return value || defaultValue;
+    }
+    function isDarkMode(){
+        return document.documentElement.getAttribute('data-darkmode') === 'true';
+    }
+
+    function getTempBarGradient(tempC){
+        var t = clamp(parseFloat(tempC) || 0, 20, 100);
+        var ratio = (t - 20) / 80;
+        var startL = Math.round(84 - ratio * 6);
+        var endL = Math.round(62 - ratio * 14);
+        return 'linear-gradient(90deg,hsl(198,58%,' + startL + '%),hsl(32,100%,' + endL + '%))';
+    }
 
     function setBar(id, txt, val){
         var $bar = $('#' + id);
@@ -842,6 +1451,183 @@
         defaultValue = defaultValue || '--';
         return isEmptyValue(value) ? defaultValue : value;
     }
+
+    function escapeHtml(value) {
+        return String(value === undefined || value === null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatPortSpeed(speed) {
+        var value = parseInt(speed, 10) || 0;
+        var speedMap = {
+            10: '10Mbps',
+            100: '100Mbps',
+            1000: '1Gbps',
+            2500: '2.5Gbps',
+            5000: '5Gbps',
+            10000: '10Gbps'
+        };
+        if (speedMap[value]) {
+            return speedMap[value];
+        }
+        if (value > 1000) {
+            return (value / 1000).toFixed(value % 1000 === 0 ? 0 : 1) + 'Gbps';
+        }
+        return value > 0 ? value + 'Mbps' : '--';
+    }
+
+    function getPortSpeedClass(port) {
+        var speed = parseInt(port && port.speed, 10) || 0;
+        if (!port || parseInt(port.up, 10) !== 1) {
+            return 'port-down';
+        }
+        if (speed > 1000) return 'port-up port-speed-high';
+        if (speed === 1000) return 'port-up port-speed-mid';
+        return 'port-up port-speed-low';
+    }
+
+    function renderPortStatus(portList) {
+        var $grid = $('#port-status-grid');
+        if (!$grid.length) {
+            return;
+        }
+        if (!Array.isArray(portList) || portList.length === 0) {
+            $grid.html('<div class="port-empty" style="grid-column:1 / -1;">' + _NoData + '</div>');
+            return;
+        }
+
+        var html = '';
+        var sortedPorts = portList.slice().sort(function(a, b) {
+            var roleA = a && a.role === 'wan' ? 0 : 1;
+            var roleB = b && b.role === 'wan' ? 0 : 1;
+            if (roleA !== roleB) {
+                return roleA - roleB;
+            }
+            return 0;
+        });
+        sortedPorts.slice(0, 8).forEach(function(port) {
+            var name = port && port.name ? String(port.name) : '--';
+            var role = port && port.role ? String(port.role).toLowerCase() : '';
+            var displayName = role === 'wan' ? 'wan' : name;
+            var speedText = formatPortSpeed(port && port.speed);
+            var statusText = port && parseInt(port.up, 10) === 1 ? 'Up' : 'Down';
+            var duplexText = port && port.duplex && String(port.duplex).toLowerCase() !== 'unknown' ? String(port.duplex) : '--';
+            var duplexSuffix = '';
+            if (duplexText !== '--') {
+                var duplexLower = duplexText.toLowerCase();
+                if (duplexLower === 'full') {
+                    duplexSuffix = '(全双工)';
+                } else if (duplexLower === 'half') {
+                    duplexSuffix = '(半双工)';
+                } else {
+                    duplexSuffix = '(' + duplexText + ')';
+                }
+            }
+            var speedDetailText = speedText + duplexSuffix;
+            var macText = port && port.mac ? String(port.mac) : '--';
+            var tooltipHtml = '<div class="tooltip-row"><span class="tooltip-label">' + _Name + ':</span><span class="tooltip-value">' + escapeHtml(displayName) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _Status + ':</span><span class="tooltip-value">' + escapeHtml(statusText) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _Speed + ':</span><span class="tooltip-value">' + escapeHtml(speedDetailText) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _MACAddress + ':</span><span class="tooltip-value">' + escapeHtml(macText) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _RxBytes + ':</span><span class="tooltip-value">' + escapeHtml(port && port.rx_bytes !== undefined ? port.rx_bytes : 0) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _TxBytes + ':</span><span class="tooltip-value">' + escapeHtml(port && port.tx_bytes !== undefined ? port.tx_bytes : 0) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _RxPackets + ':</span><span class="tooltip-value">' + escapeHtml(port && port.rx_packets !== undefined ? port.rx_packets : 0) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _TxPackets + ':</span><span class="tooltip-value">' + escapeHtml(port && port.tx_packets !== undefined ? port.tx_packets : 0) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _RxErrorPackets + ':</span><span class="tooltip-value">' + escapeHtml(port && port.rx_error_packets !== undefined ? port.rx_error_packets : 0) + '</span></div>' +
+                              '<div class="tooltip-row"><span class="tooltip-label">' + _TxErrorPackets + ':</span><span class="tooltip-value">' + escapeHtml(port && port.tx_error_packets !== undefined ? port.tx_error_packets : 0) + '</span></div>';
+            html += '<div class="port-item ' + getPortSpeedClass(port) + '">' +
+                    '<span class="port-icon"></span>' +
+                    '<span class="port-name">' + escapeHtml(displayName) + '</span>' +
+                    '<span class="port-speed">' + escapeHtml(speedText) + '</span>' +
+                    '<span class="tooltip tooltip-left">' + tooltipHtml + '</span>' +
+                    '</div>';
+        });
+        $grid.html(html);
+    }
+
+    function normalizeDnsValue(value) {
+        if (Array.isArray(value)) {
+            return value.filter(function(item) {
+                return !isEmptyValue(item);
+            }).join(' / ');
+        }
+        if (typeof value === 'string') {
+            return value;
+        }
+        return '';
+    }
+
+    function maskToPrefix(mask) {
+        if (isEmptyValue(mask)) {
+            return null;
+        }
+        var parts = String(mask).split('.');
+        if (parts.length !== 4) {
+            return null;
+        }
+        var bits = '';
+        for (var i = 0; i < parts.length; i++) {
+            var n = parseInt(parts[i], 10);
+            if (isNaN(n) || n < 0 || n > 255) {
+                return null;
+            }
+            var partBits = n.toString(2);
+            while (partBits.length < 8) {
+                partBits = '0' + partBits;
+            }
+            bits += partBits;
+        }
+        if (bits.indexOf('01') !== -1) {
+            return null;
+        }
+        return bits.replace(/0/g, '').length;
+    }
+
+    function formatIpWithPrefix(ip, mask) {
+        if (isEmptyValue(ip)) {
+            return '--';
+        }
+        var prefix = maskToPrefix(mask);
+        if (prefix === null) {
+            return ip;
+        }
+        return ip + '/' + prefix;
+    }
+
+    function setSummaryValue(id, value) {
+        var text = formatEmptyValue(value);
+        var $el = $('#' + id);
+        $el.text(text).attr('title', text);
+    }
+
+    function updateSystemTooltip(sys, versionStr, uptimeStr) {
+        var hostname = formatEmptyValue(sys.hostname);
+        var cpuModel = formatEmptyValue(sys.cpu_model_name);
+        var kernelVersion = formatEmptyValue(sys.kernel_version);
+        var model = formatEmptyValue(sys.model);
+        var html = '<div class="tooltip-row"><span class="tooltip-label">' + _Hostname + ':</span><span class="tooltip-value">' + hostname + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _CPU + ':</span><span class="tooltip-value">' + cpuModel + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _KernelVersion + ':</span><span class="tooltip-value">' + kernelVersion + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _DeviceModel + ':</span><span class="tooltip-value">' + model + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _FirmwareVersion + ':</span><span class="tooltip-value">' + formatEmptyValue(versionStr) + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _Uptime + ':</span><span class="tooltip-value">' + formatEmptyValue(uptimeStr) + '</span></div>';
+        $('#sysinfo-tooltip').html(html);
+    }
+
+    function formatOpenwrtVersion(sys) {
+        if (sys.openwrt_version === 'SNAPSHOT' && sys.release_date) {
+            return 's' + sys.release_date;
+        }
+        return sys.openwrt_version;
+    }
+
+    function isX86Arch(arch) {
+        return arch === 'x86-64' || arch === 'x86_64';
+    }
     
     function updateDashboardData(data){
         var sys = data.system_status || {};
@@ -851,33 +1637,53 @@
         var traffic = data.interface_traffic || {};
         
         if(sys.hostname) {
-            $('#sys-hostname').text(sys.hostname);
+            $('#sys-hostname').text(sys.hostname).attr('title', sys.hostname);
+        } else {
+            $('#sys-hostname').text('--').attr('title', '--');
         }
-        if(sys.model) {
-            $('#sys-model').text(sys.model).attr('title', sys.model);
+        var modelLabel = _DeviceModel;
+        var modelValue = sys.model;
+        if(isX86Arch(sys.arch)) {
+            modelLabel = _CPU;
+            modelValue = sys.cpu_model_name;
+        }
+        $('#sys-model-label').text(modelLabel);
+        if(modelValue) {
+            $('#sys-model').text(modelValue).attr('title', modelValue);
+        } else {
+            $('#sys-model').text('--').attr('title', '--');
         }
         var versionStr = '';
-        if(sys.openwrt_version && sys.fwx_version) {
-            versionStr = sys.openwrt_version + '-' + sys.fwx_version;
-        } else if(sys.openwrt_version) {
-            versionStr = sys.openwrt_version;
+        var openwrtVersion = formatOpenwrtVersion(sys);
+        if(openwrtVersion && sys.fwx_version) {
+            versionStr = openwrtVersion + '-' + sys.fwx_version;
+        } else if(openwrtVersion) {
+            versionStr = openwrtVersion;
         } else if(sys.fwx_version) {
             versionStr = sys.fwx_version;
         } else {
             versionStr = '--';
         }
-        $('#sys-version').text(versionStr);
+        $('#sys-version').text(versionStr).attr('title', versionStr);
         if(sys.kernel_version) {
             $('#sys-kernel-version').text(sys.kernel_version);
+        } else {
+            $('#sys-kernel-version').text('--');
         }
         if(sys.cpu_model_name) {
             $('#sys-cpu-model-name').text(sys.cpu_model_name).attr('title', sys.cpu_model_name);
+        } else {
+            $('#sys-cpu-model-name').text('--').attr('title', '--');
         }
-  
+
+        var uptimeStr = '--';
         if(sys.uptime) {
-            var uptimeStr = formatUptime(sys.uptime);
-            $('#sys-uptime').text(uptimeStr);
+            uptimeStr = formatUptime(sys.uptime);
+            $('#sys-uptime').text(uptimeStr).attr('title', uptimeStr);
+        } else {
+            $('#sys-uptime').text('--').attr('title', '--');
         }
+        updateSystemTooltip(sys, versionStr, uptimeStr);
         
         if(sys.total_mem !== undefined) {
             $('#sys-mem-total').text(formatMemory(sys.total_mem));
@@ -893,32 +1699,36 @@
             $('#mini-online').text(sys.client_num);
         }
         
+        var hasOverlayStorage = false;
+        var hasTmpStorage = false;
+        var tmpPercent = 0;
+        var tmpText = '--';
         if(sys.storage) {
             var storage = sys.storage;
             if(storage.tmp && storage.tmp.total_kb !== undefined && storage.tmp.used_kb !== undefined) {
-                var tmpTotal = parseInt(storage.tmp.total_kb) || 0;
-                var tmpUsed = parseInt(storage.tmp.used_kb) || 0;
-                var tmpPercent = tmpTotal > 0 ? Math.round((tmpUsed / tmpTotal) * 100) : 0;
-                var tmpText = formatStorage(tmpUsed) + '/' + formatStorage(tmpTotal) + ' (' + tmpPercent + '%)';
-                $('#storage-tmp-text').text(tmpText);
-                setBar('storage-tmp-bar', '', tmpPercent);
+                var tmpTotal = parseInt(storage.tmp.total_kb, 10) || 0;
+                var tmpUsed = parseInt(storage.tmp.used_kb, 10) || 0;
+                tmpPercent = tmpTotal > 0 ? Math.round((tmpUsed / tmpTotal) * 100) : 0;
+                tmpText = formatStorage(tmpUsed) + ' / ' + formatStorage(tmpTotal);
+                hasTmpStorage = true;
             }
-            if(storage.root && storage.root.total_kb !== undefined && storage.root.used_kb !== undefined) {
-                var rootTotal = parseInt(storage.root.total_kb) || 0;
-                var rootUsed = parseInt(storage.root.used_kb) || 0;
-                var rootPercent = rootTotal > 0 ? Math.round((rootUsed / rootTotal) * 100) : 0;
-                var rootText = formatStorage(rootUsed) + '/' + formatStorage(rootTotal) + ' (' + rootPercent + '%)';
-                $('#storage-root-text').text(rootText);
-                setBar('storage-root-bar', '', rootPercent);
+            var overlay = storage.overlay || storage.root;
+            if(overlay && overlay.total_kb !== undefined && overlay.used_kb !== undefined) {
+                var overlayTotal = parseInt(overlay.total_kb, 10) || 0;
+                var overlayUsed = parseInt(overlay.used_kb, 10) || 0;
+                var overlayPercent = overlayTotal > 0 ? Math.round((overlayUsed / overlayTotal) * 100) : 0;
+                var overlayText = formatStorage(overlayUsed) + ' / ' + formatStorage(overlayTotal);
+                var overlayDisplayText = overlayText + ' (' + overlayPercent + '%)';
+                $('#storage-overlay-text').text(overlayDisplayText).attr('title', overlayDisplayText);
+                setBar('storage-overlay-bar', '', overlayPercent);
+                $('#storage-overlay-bar').css('min-width', overlayPercent > 0 ? '4px' : '0');
+                hasOverlayStorage = true;
             }
-            if(storage.boot && storage.boot.total_kb !== undefined && storage.boot.used_kb !== undefined) {
-                var bootTotal = parseInt(storage.boot.total_kb) || 0;
-                var bootUsed = parseInt(storage.boot.used_kb) || 0;
-                var bootPercent = bootTotal > 0 ? Math.round((bootUsed / bootTotal) * 100) : 0;
-                var bootText = formatStorage(bootUsed) + '/' + formatStorage(bootTotal) + ' (' + bootPercent + '%)';
-                $('#storage-boot-text').text(bootText);
-                setBar('storage-boot-bar', '', bootPercent);
-            }
+        }
+        if (!hasOverlayStorage) {
+            $('#storage-overlay-text').text('--').attr('title', '--');
+            setBar('storage-overlay-bar', '', 0);
+            $('#storage-overlay-bar').css('min-width', '0');
         }
         
         if(sys.flow) {
@@ -939,69 +1749,41 @@
             setMemCircularProgress('mem-ring','mem-text',memPercent, memTotal);
         }
         
-        var $tempCard = $('.mini').filter(function() {
-            return $(this).find('#cpu-temp-container, #wifi-temp-container').length > 0;
-        }).first();
+        var $envCard = $('#env-storage-card');
+        var $primaryLabel = $('#env-primary-label');
         var hasCpuTemp = sys.cpu_temp !== undefined && sys.cpu_temp > 0;
-        var hasWifiTemp = sys.wifi_temp !== undefined && sys.wifi_temp > 0;
-        
-        if (!hasCpuTemp && !hasWifiTemp) {
-            if ($tempCard.length) {
-                $tempCard.hide();
-            }
-        } else {
-            if ($tempCard.length) {
-                $tempCard.show();
-            }
-            
+
+        if ($envCard.length) {
             if (hasCpuTemp) {
-                var $cpuTempContainer = $('#cpu-temp-container');
-                var $cpuTempText = $('#cpu-temp-text');
-                var $cpuTempBar = $('#cpu-temp-bar');
-                if($cpuTempContainer.length && $cpuTempText.length && $cpuTempBar.length){
-                    $cpuTempContainer.show();
-                    var cpuTempVal = Math.round(sys.cpu_temp);
-                    $cpuTempText.text(cpuTempVal + '°C');
-                    var cpuTempWidth = Math.min(100, Math.max(0, cpuTempVal));
-                    $cpuTempBar.css('width', cpuTempWidth + '%');
-                }
+                $primaryLabel.text(_Temperature);
+                var cpuTempVal = Math.round(sys.cpu_temp);
+                var cpuTempWidth = Math.min(100, Math.max(0, cpuTempVal));
+                var cpuTempText = cpuTempVal + '\u00B0C';
+                $('#cpu-temp-text').text(cpuTempText).attr('title', cpuTempText);
+                $('#cpu-temp-bar')
+                    .css('background', getTempBarGradient(cpuTempVal))
+                    .css('width', cpuTempWidth + '%')
+                    .css('min-width', cpuTempWidth > 0 ? '4px' : '0');
+            } else if (hasTmpStorage) {
+                $primaryLabel.text(_TempSpace);
+                var tmpDisplayText = tmpText + ' (' + tmpPercent + '%)';
+                $('#cpu-temp-text').text(tmpDisplayText).attr('title', tmpDisplayText);
+                $('#cpu-temp-bar')
+                    .css('background', getRootCssVar('--temp-space-bar-gradient', 'linear-gradient(90deg,#71def1,#87c6ff)'))
+                    .css('width', tmpPercent + '%')
+                    .css('min-width', tmpPercent > 0 ? '4px' : '0');
             } else {
-                $('#cpu-temp-container').hide();
-            }
-            
-            if (hasWifiTemp) {
-                var $wifiTempContainer = $('#wifi-temp-container');
-                var $wifiTempText = $('#wifi-temp-text');
-                var $wifiTempBar = $('#wifi-temp-bar');
-                if($wifiTempContainer.length && $wifiTempText.length && $wifiTempBar.length){
-                    $wifiTempContainer.show();
-                    var wifiTempVal = Math.round(sys.wifi_temp);
-                    $wifiTempText.text(wifiTempVal + '°C');
-                    var wifiTempWidth = Math.min(100, Math.max(0, wifiTempVal));
-                    $wifiTempBar.css('width', wifiTempWidth + '%');
-                }
-            } else {
-                $('#wifi-temp-container').hide();
+                $primaryLabel.text(_TempSpace);
+                $('#cpu-temp-text').text('--').attr('title', '--');
+                $('#cpu-temp-bar')
+                    .css('background', getRootCssVar('--temp-bar-default-gradient', 'linear-gradient(90deg,#f89501,#db4702)'))
+                    .css('width', '0')
+                    .css('min-width', '0');
             }
         }
         
-        var lanDns = '';
-        if (net.lan && net.lan.dns) {
-            if (Array.isArray(net.lan.dns)) {
-                lanDns = net.lan.dns.filter(function(d) { return d && d !== ''; }).join(' / ');
-            } else if (typeof net.lan.dns === 'string') {
-                lanDns = net.lan.dns;
-            }
-        }
-        
-        var wanDns = '';
-        if (net.wan && net.wan.dns) {
-            if (Array.isArray(net.wan.dns)) {
-                wanDns = net.wan.dns.filter(function(d) { return d && d !== ''; }).join(' / ');
-            } else if (typeof net.wan.dns === 'string') {
-                wanDns = net.wan.dns;
-            }
-        }
+        var lanDns = normalizeDnsValue(net.lan && net.lan.dns);
+        var wanDns = normalizeDnsValue(net.wan && net.wan.dns);
         
         var wanGateway = (net.wan && net.wan.gateway) ? net.wan.gateway : '';
         var lanGateway = (net.lan && net.lan.gateway) ? net.lan.gateway : '';
@@ -1015,17 +1797,20 @@
             lan: {
                 ip: net.lan && net.lan.ip || '0.0.0.0',
                 mask: net.lan && net.lan.mask || '255.255.255.0',
+                ipv6: net.lan && net.lan.ipv6 || '',
                 gateway: lanGateway,
                 dns: lanDns
             },
             wan: {
                 ip: net.wan && net.wan.ip || '0.0.0.0',
                 mask: net.wan && net.wan.mask || '255.255.255.0',
+                ipv6: net.wan && net.wan.ipv6 || '',
                 gateway: wanGateway,
                 dns: wanDns
             }
         };
         updateNetworkInfo(networkData);
+        renderPortStatus(net.port_status || []);
         
         if(net.internet !== undefined) {
             var $internetStatusEl = $('#internet-status');
@@ -1098,10 +1883,9 @@
     setCircularProgress('cpu-ring','cpu-text',cpu);
     setMemCircularProgress('mem-ring','mem-text',mem, memTotalMB);
     
-    setBar('storage-tmp-bar','storage-tmp-text',0);
-    setBar('storage-root-bar','storage-root-text',0);
-    setBar('storage-boot-bar','storage-boot-text',0);
+    setBar('storage-overlay-bar','',0);
     
+    var TRAFFIC_SAMPLE_POINTS = 60;
     var pieApp = echarts.init($('#pie-app')[0]);
     var lineWan = echarts.init($('#line-wan')[0]);
     var barUserTraffic = echarts.init($('#bar-user-traffic')[0]);
@@ -1128,19 +1912,18 @@
         splitLine:{lineStyle:{color:splitLineColor}} 
     };
     var palette = [
-    '#34d399',  
-        '#a78bfa',  // violet-400 
-        '#60a5fa',  // blue-400
-        '#fb923c',  // orange-400 
-        '#fbbf24',  // amber-400 
-		'#60a5fa',  // blue-400 
-        '#fbbf24',  // amber-400 
-        '#34d399',  // emerald-400
-        '#06b6d4',  // cyan-500 
-        '#3b82f6',  // blue-500 
-        '#8b5cf6',  // violet-500 
-        '#f59e0b',  // amber-500
-        '#10b981'   // emerald-500 
+        '#58a6ff',
+        '#7c8cff',
+        '#72b7a1',
+        '#4dc7ff',
+        '#f6b26b',
+        '#ff9f80',
+        '#d39f6a',
+        '#f9d77e',
+        '#60a5fa',
+        '#c79abb',
+        '#fda4af',
+        '#93c5fd'
     ];
     
     var currentAppStatsType = 'daily';
@@ -1159,16 +1942,16 @@
             backgroundColor: tooltipBg,
             textStyle: { color: tooltipText },
             formatter: function(params) {
-                var name = params.name || '未知';
+                var name = params.name || _Unknown;
                 var value = params.value || 0;
                 var percent = params.percent || 0;
                 var hours = Math.floor(value / 3600);
                 var minutes = Math.floor((value % 3600) / 60);
                 var timeStr = '';
                 if (hours > 0) {
-                    timeStr = hours + '小时' + (minutes > 0 ? minutes + '分钟' : '');
+                    timeStr = hours + _Hour + (minutes > 0 ? minutes + _Minute : '');
                 } else {
-                    timeStr = minutes + '分钟';
+                    timeStr = minutes + _Minute;
                 }
                 return name + '<br/>' + timeStr + ' (' + percent.toFixed(1) + '%)';
             }
@@ -1207,7 +1990,7 @@
         
         var chartData = typesArray.map(function(item) {
             return {
-                name: item.name || ('分类' + item.app_type),
+                name: item.name || ('Category ' + item.app_type),
                 value: item.total_time || 0
             };
         });
@@ -1264,33 +2047,61 @@
         });
     }
     
-    $('.tab-btn').on('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        var $btn = $(this);
-        var type = $btn.data('type');
-        
-        if ($btn.hasClass('active')) {
-            return;
-        }
-        
-        $('.tab-btn').removeClass('active');
-        $btn.addClass('active');
-        
+    $('#app-stats-select').on('change', function() {
+        var type = $(this).val() || 'daily';
         currentAppStatsType = type;
-        
         if (appStatsData[type]) {
             updateAppTypeStatsChart(appStatsData[type]);
         } else {
             fetchAppTypeStats(type);
         }
     });
+
+    function initAppStatsCustomSwitch() {
+        var $native = $('#app-stats-select');
+        if (!$native.length || $('#app-stats-switch').length) {
+            return;
+        }
+        var $switch = $('<span id="app-stats-switch" class="app-stats-switch">' +
+            '<button type="button" id="app-stats-switch-btn" class="app-stats-switch-btn">今日</button>' +
+            '<div id="app-stats-switch-menu" class="app-stats-switch-menu">' +
+            '<button type="button" class="app-stats-switch-item" data-type="hourly">近一小时</button>' +
+            '<button type="button" class="app-stats-switch-item active" data-type="daily">今日</button>' +
+            '</div></span>');
+
+        $native.closest('.app-stats-select-wrap').after($switch);
+
+        var updateSwitch = function(type) {
+            var label = type === 'hourly' ? '近一小时' : '今日';
+            $('#app-stats-switch-btn').text(label);
+            $('#app-stats-switch-menu .app-stats-switch-item').removeClass('active');
+            $('#app-stats-switch-menu .app-stats-switch-item[data-type="' + type + '"]').addClass('active');
+        };
+        updateSwitch(currentAppStatsType || 'daily');
+
+        $(document).on('click', '#app-stats-switch-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $('#app-stats-switch').toggleClass('open');
+        });
+        $(document).on('click', '#app-stats-switch-menu .app-stats-switch-item', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var type = $(this).data('type') || 'daily';
+            updateSwitch(type);
+            $('#app-stats-switch').removeClass('open');
+            $native.val(type).trigger('change');
+        });
+        $(document).on('click', function() {
+            $('#app-stats-switch').removeClass('open');
+        });
+    }
     
 
     fetchDashboardCommon();
     fetchDashboardData();
     fetchAllAppTypeStats();
+    initAppStatsCustomSwitch();
  
     setInterval(function(){
         fetchDashboardCommon();
@@ -1305,7 +2116,7 @@
 
     barUserTraffic.setOption({
         backgroundColor: 'transparent',
-        color: ['#60a5fa', '#10b981'], 
+        color: ['#58a6ff', '#8b7bff'], 
         textStyle: { color: axisLabelColor },
         tooltip: {
             trigger: 'item', 
@@ -1313,7 +2124,7 @@
             backgroundColor: tooltipBg,
             textStyle: { color: tooltipText }, 
             formatter: function(params) {
-                if (params.seriesName !== '下行') {
+                if (params.seriesName !== _Downstream) {
                     return '';
                 }
                 var user = params.data.user;
@@ -1329,8 +2140,8 @@
                 return displayName + '<br/>' +
                        'MAC: ' + (user.mac || '') + '<br/>' +
                        _IP + ': ' + user.ip + '<br/>' +
-                       '<span style="color:#60a5fa;">●</span> ' + _Upstream + ': ' + upStr + '<br/>' +
-                       '<span style="color:#10b981;">●</span> ' + _Downstream + ': ' + downStr + '<br/>' +
+                       '<span style="color:#58a6ff;">&bull;</span> ' + _Upstream + ': ' + upStr + '<br/>' +
+                       '<span style="color:#8b7bff;">&bull;</span> ' + _Downstream + ': ' + downStr + '<br/>' +
                        _Total + ': ' + totalStr;
             },
             confine: true 
@@ -1451,8 +2262,8 @@
  
     var networkData = {
         work_mode: 1, 
-        lan: {ip: '', mask: '', dns: ''},
-        wan: {ip: '', mask: '', dns: '', gateway: ''}
+        lan: {ip: '', mask: '', ipv6: '', dns: '', gateway: ''},
+        wan: {ip: '', mask: '', ipv6: '', dns: '', gateway: ''}
     };
     
     function updateNetworkInfo(data){
@@ -1466,23 +2277,18 @@
         var lan = networkData.lan || {};
         var wan = networkData.wan || {};
         var isGatewayMode = networkData.isGatewayMode !== undefined ? networkData.isGatewayMode : (wan && wan.ip && wan.ip !== '0.0.0.0' && wan.ip !== '');
-        
-        if(isGatewayMode){
-            $('#gw-mode-lan-ip-label, #gw-mode-lan-ip-value, #gw-mode-wan-ip-label, #gw-mode-wan-ip-value, #gw-mode-gateway-label, #gw-mode-gateway-value, #gw-mode-dns-label, #gw-mode-dns-value').show();
-            $('#bypass-mode-ip-label, #bypass-mode-ip-value, #bypass-mode-mask-label, #bypass-mode-mask-value, #bypass-mode-gateway-label, #bypass-mode-gateway-value, #bypass-mode-dns-label, #bypass-mode-dns-value').hide();
-            
-            $('#gw-mode-lan-ip-value').text(lan.ip || '');
-            $('#gw-mode-wan-ip-value').text(wan.ip || '');
-            $('#gw-mode-gateway-value').text(formatEmptyValue(wan.gateway));
-            $('#gw-mode-dns-value').text(formatEmptyValue(wan.dns));
-        } else {
-            $('#gw-mode-lan-ip-label, #gw-mode-lan-ip-value, #gw-mode-wan-ip-label, #gw-mode-wan-ip-value, #gw-mode-gateway-label, #gw-mode-gateway-value, #gw-mode-dns-label, #gw-mode-dns-value').hide();
-            $('#bypass-mode-ip-label, #bypass-mode-ip-value, #bypass-mode-mask-label, #bypass-mode-mask-value, #bypass-mode-gateway-label, #bypass-mode-gateway-value, #bypass-mode-dns-label, #bypass-mode-dns-value').show();
-            $('#bypass-mode-ip-value').text(lan.ip || '');
-            $('#bypass-mode-mask-value').text(lan.mask || '');
-            $('#bypass-mode-gateway-value').text(formatEmptyValue(lan.gateway));
-            $('#bypass-mode-dns-value').text(formatEmptyValue(lan.dns));
-        }
+
+        var lanSummary = formatIpWithPrefix(lan.ip, lan.mask);
+        var wanSummary = isGatewayMode ? formatIpWithPrefix(wan.ip, wan.mask) : '--';
+        var lanSummaryDisplay = lanSummary;
+        var wanSummaryDisplay = wanSummary;
+        var gatewaySummary = isGatewayMode ? wan.gateway : lan.gateway;
+        var dnsSummary = isGatewayMode ? wan.dns : lan.dns;
+
+        setSummaryValue('network-lan-summary', lanSummaryDisplay);
+        setSummaryValue('network-wan-summary', wanSummaryDisplay);
+        setSummaryValue('network-gateway-summary', gatewaySummary);
+        setSummaryValue('network-dns-summary', dnsSummary);
         
         updateNetworkTooltip();
     }
@@ -1494,36 +2300,40 @@
         
         var isGatewayMode = networkData.isGatewayMode !== undefined ? networkData.isGatewayMode : (wan && wan.ip && wan.ip !== '0.0.0.0' && wan.ip !== '');
         
-        if(isGatewayMode){
-            var html = '<div class="tooltip-row"><span class="tooltip-label" style="font-weight:600;">LAN:</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _IPAddress + ':</span><span class="tooltip-value">'+(lan.ip||'')+'</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _Mask + ':</span><span class="tooltip-value">'+(lan.mask||'')+'</span></div>' +
-                       '<div class="tooltip-row" style="margin-top:8px;"><span class="tooltip-label" style="font-weight:600;">WAN:</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _IPAddress + ':</span><span class="tooltip-value">'+(wan.ip||'')+'</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _Mask + ':</span><span class="tooltip-value">'+(wan.mask||'')+'</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _Gateway + ':</span><span class="tooltip-value">'+formatEmptyValue(wan.gateway)+'</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _DNS + ':</span><span class="tooltip-value">'+formatEmptyValue(wan.dns)+'</span></div>';
-            $tooltip.html(html);
+        var html = '<div class="tooltip-row"><span class="tooltip-label" style="font-weight:600;">LAN:</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _IPAddress + ':</span><span class="tooltip-value">' + formatEmptyValue(lan.ip) + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _Mask + ':</span><span class="tooltip-value">' + formatEmptyValue(lan.mask) + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">IPv6:</span><span class="tooltip-value">' + formatEmptyValue(lan.ipv6) + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _Gateway + ':</span><span class="tooltip-value">' + formatEmptyValue(lan.gateway) + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _DNS + ':</span><span class="tooltip-value">' + formatEmptyValue(lan.dns) + '</span></div>' +
+                   '<div class="tooltip-row" style="margin-top:8px;"><span class="tooltip-label" style="font-weight:600;">WAN:</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _IPAddress + ':</span><span class="tooltip-value">' + formatEmptyValue(wan.ip) + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">' + _Mask + ':</span><span class="tooltip-value">' + formatEmptyValue(wan.mask) + '</span></div>' +
+                   '<div class="tooltip-row"><span class="tooltip-label">IPv6:</span><span class="tooltip-value">' + formatEmptyValue(wan.ipv6) + '</span></div>';
+        if (isGatewayMode) {
+            html += '<div class="tooltip-row"><span class="tooltip-label">' + _Gateway + ':</span><span class="tooltip-value">' + formatEmptyValue(wan.gateway) + '</span></div>' +
+                    '<div class="tooltip-row"><span class="tooltip-label">' + _DNS + ':</span><span class="tooltip-value">' + formatEmptyValue(wan.dns) + '</span></div>';
         } else {
-            var html = '<div class="tooltip-row"><span class="tooltip-label" style="font-weight:600;">LAN:</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _IPAddress + ':</span><span class="tooltip-value">'+(lan.ip||'')+'</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _Mask + ':</span><span class="tooltip-value">'+(lan.mask||'')+'</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _Gateway + ':</span><span class="tooltip-value">'+formatEmptyValue(lan.gateway)+'</span></div>' +
-                       '<div class="tooltip-row"><span class="tooltip-label">' + _DNS + ':</span><span class="tooltip-value">'+formatEmptyValue(lan.dns)+'</span></div>';
-            $tooltip.html(html);
+            html += '<div class="tooltip-row"><span class="tooltip-label">' + _Gateway + ':</span><span class="tooltip-value">' + formatEmptyValue(lan.gateway) + '</span></div>' +
+                    '<div class="tooltip-row"><span class="tooltip-label">' + _DNS + ':</span><span class="tooltip-value">' + formatEmptyValue(lan.dns) + '</span></div>';
         }
+        $tooltip.html(html);
     }
-    
 
-    setTimeout(function(){
-        var $networkTitle = $('#network-title');
-        if($networkTitle.length){
-            $networkTitle.on('mouseenter', function(){
-                $('#network-tooltip').show();
-            }).on('mouseleave', function(){
-                $('#network-tooltip').hide();
+    function bindTooltipHover(titleId, tooltipId) {
+        var $title = $('#' + titleId);
+        if ($title.length) {
+            $title.on('mouseenter', function() {
+                $('#' + tooltipId).show();
+            }).on('mouseleave', function() {
+                $('#' + tooltipId).hide();
             });
         }
+    }
+
+    setTimeout(function(){
+        bindTooltipHover('network-title', 'network-tooltip');
+        bindTooltipHover('sysinfo-title', 'sysinfo-tooltip');
     }, 100);
 
     var currentInterface = '';
@@ -1604,7 +2414,7 @@
                 down = [];
                 curUp = 2e7;
                 curDown = 5e7;
-                for(var i=0; i<30; i++){
+                for(var i=0; i<TRAFFIC_SAMPLE_POINTS; i++){
                     up.push(0);
                     down.push(0);
                 }
@@ -1638,9 +2448,9 @@
         var $titleEl = $('#traffic-title');
         if($titleEl.length){
             if(interfaceName){
-                $titleEl.text('流量统计(' + interfaceName + ')');
+                $titleEl.text(_RealtimeTraffic + ' (' + interfaceName + ')');
             } else {
-                $titleEl.text('流量统计');
+                $titleEl.text(_RealtimeTraffic);
             }
         }
     }
@@ -1678,13 +2488,13 @@
         }
     }
     var x = [], up = [], down = [], curUp = 2e7, curDown = 5e7; // bytes/s
-    for (var i=0;i<30;i++){ x.push(i-29); }
+    for (var i=0;i<TRAFFIC_SAMPLE_POINTS;i++){ x.push(i - (TRAFFIC_SAMPLE_POINTS - 1)); }
     lineWan.setOption({
         backgroundColor: 'transparent',
-        color: ['#60a5fa', '#22c55e'],  // 蓝色=上行，绿色=下行（与图片一致）
+        color: ['#58a6ff', '#8b7bff'],
         textStyle:{ color: axisLabelColor },
-        animation: false,  // 禁用初始动画
-        animationDurationUpdate: 0,  // 更新时无动画延迟，实现平滑平移
+        animation: false,
+        animationDurationUpdate: 0,
         tooltip:{ 
             trigger:'axis', 
             backgroundColor: tooltipBg,
@@ -1694,10 +2504,10 @@
             }
         },
         grid: {
-            left: '8%',  // 增加左边距，确保Y轴刻度数字完整显示
-            right: '3%',  // 减少右边距
-            top: '15%',  // 减少上边距，为图例留出空间
-            bottom: '3%',  // 减少下边距
+            left: '8%',
+            right: '3%',
+            top: '15%',
+            bottom: '3%',
             containLabel: false
         },
         xAxis:{ 
@@ -1767,7 +2577,7 @@
     if(typeof up === 'undefined' || up.length === 0){
         up = [];
         down = [];
-        for(var i=0; i<30; i++){
+        for(var i=0; i<TRAFFIC_SAMPLE_POINTS; i++){
             up.push(0);
             down.push(0);
         }
@@ -2257,13 +3067,13 @@
             downData.push(item.down || 0);
         });
         
-        while(upData.length < 30){
+        while(upData.length < TRAFFIC_SAMPLE_POINTS){
             upData.unshift(0);
             downData.unshift(0);
         }
-        if(upData.length > 30){
-            upData = upData.slice(-30);
-            downData = downData.slice(-30);
+        if(upData.length > TRAFFIC_SAMPLE_POINTS){
+            upData = upData.slice(-TRAFFIC_SAMPLE_POINTS);
+            downData = downData.slice(-TRAFFIC_SAMPLE_POINTS);
         }
         
         var dataChanged = false;

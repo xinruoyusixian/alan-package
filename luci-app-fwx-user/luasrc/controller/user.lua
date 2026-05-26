@@ -1,5 +1,6 @@
 module("luci.controller.user", package.seeall)
 local utl = require "luci.util"
+local uci = require "luci.model.uci"
 
 function index()
 	local page
@@ -12,11 +13,18 @@ function index()
 	entry({"admin", "fwx", "dev_visit_list"}, call("get_dev_visit_list"), nil).leaf = true
 	entry({"admin", "fwx", "dev_visit_time"}, call("get_dev_visit_time"), nil).leaf = true
 	entry({"admin", "fwx", "app_class_visit_time"}, call("get_app_class_visit_time"), nil).leaf = true
+	entry({"admin", "fwx", "get_class_list"}, call("get_class_list"), nil).leaf = true
 	entry({"admin", "fwx", "get_all_users"}, call("get_all_users"), nil).leaf = true
+	entry({"admin", "fwx", "get_system_base_info"}, call("get_system_base_info"), nil).leaf = true
+	entry({"admin", "fwx", "get_mac_blacklist"}, call("get_mac_blacklist"), nil).leaf = true
+	entry({"admin", "fwx", "add_mac_blacklist"}, call("add_mac_blacklist"), nil).leaf = true
+	entry({"admin", "fwx", "del_mac_blacklist"}, call("del_mac_blacklist"), nil).leaf = true
+	entry({"admin", "fwx", "get_parental_control_detail"}, call("get_parental_control_detail"), nil).leaf = true
 	entry({"admin", "fwx", "set_nickname"}, call("set_nickname"), nil).leaf = true
 	entry({"admin", "fwx", "get_hourly_stats"}, call("get_hourly_stats"), nil).leaf = true
 	entry({"admin", "fwx", "get_user_basic_info"}, call("get_user_basic_info"), nil).leaf = true
 	entry({"admin", "fwx", "get_online_offline_records"}, call("get_online_offline_records"), nil).leaf = true
+	entry({"admin", "fwx", "get_user_parental_control_rules"}, call("get_user_parental_control_rules"), nil).leaf = true
 end
 
 function get_hostname_by_mac(dst_mac)
@@ -53,6 +61,81 @@ function cmp_func(a,b)
 	return a.latest_time > b.latest_time
 end
 
+function normalize_mac(mac)
+	if not mac then
+		return ""
+	end
+	return tostring(mac):gsub("^%s+", ""):gsub("%s+$", ""):upper()
+end
+
+function get_mac_blacklist_list_from_uci()
+	local cursor = uci.cursor()
+	local mac_list = cursor:get_list("mac_blacklist", "base", "mac_list")
+	if type(mac_list) == "string" then
+		mac_list = {mac_list}
+	elseif type(mac_list) ~= "table" then
+		mac_list = {}
+	end
+	cursor:unload("mac_blacklist")
+
+	local uniq = {}
+	local list = {}
+	for _, mac in ipairs(mac_list) do
+		local normalized_mac = normalize_mac(mac)
+		if normalized_mac ~= "" and not uniq[normalized_mac] then
+			uniq[normalized_mac] = true
+			table.insert(list, normalized_mac)
+		end
+	end
+	table.sort(list)
+	return list
+end
+
+function get_mac_blacklist_set_from_uci()
+	local mac_set = {}
+	local mac_list = get_mac_blacklist_list_from_uci()
+	for _, mac in ipairs(mac_list) do
+		mac_set[mac] = true
+	end
+	return mac_set
+end
+
+function save_mac_blacklist_list_to_uci(mac_list)
+	local cursor = uci.cursor()
+	if not cursor:get("mac_blacklist", "base") then
+		cursor:section("mac_blacklist", "settings", "base", {})
+	end
+	cursor:delete("mac_blacklist", "base", "mac_list")
+	if type(mac_list) == "table" and #mac_list > 0 then
+		table.sort(mac_list)
+		cursor:set("mac_blacklist", "base", "mac_list", mac_list)
+	end
+	cursor:save("mac_blacklist")
+	cursor:commit("mac_blacklist")
+	cursor:unload("mac_blacklist")
+end
+
+function get_all_users_map_for_blacklist()
+	local req_obj = {}
+	req_obj.api = "get_all_users"
+	req_obj.data = {
+		flag = 2,
+		page = 0,
+		page_size = 1024
+	}
+
+	local resp_obj = utl.ubus("fwx", "common", req_obj)
+	local user_map = {}
+	if resp_obj and resp_obj.code == 2000 and resp_obj.data and type(resp_obj.data.list) == "table" then
+		for _, user in ipairs(resp_obj.data.list) do
+			local mac = normalize_mac(user.mac)
+			if mac ~= "" then
+				user_map[mac] = user
+			end
+		end
+	end
+	return user_map
+end
 
 function user_status()
 	local json = require "luci.jsonc"
@@ -96,6 +179,22 @@ function user_status()
 	luci.http.write_json(history);
 end
 
+function get_class_list()
+	luci.http.prepare_content("application/json")
+
+	local req_obj = {}
+	req_obj.api = "class_list"
+	req_obj.data = {}
+
+	local resp_obj = utl.ubus("fwx", "common", req_obj)
+
+	if resp_obj and resp_obj.code == 2000 and resp_obj.data then
+		luci.http.write_json(resp_obj.data)
+	else
+		luci.http.write_json({class_list = {}})
+	end
+end
+
 
 function get_all_users()
 	local json = require "luci.jsonc"
@@ -105,15 +204,179 @@ function get_all_users()
 	req_obj.api = "get_all_users"
 	req_obj.data = {
 		flag = luci.http.formvalue("flag"),
-		page = luci.http.formvalue("page")
+		page = luci.http.formvalue("page"),
+		page_size = luci.http.formvalue("page_size")
 	}
 	
 	local resp_obj = utl.ubus("fwx", "common", req_obj)
 	
 	if resp_obj and resp_obj.code == 2000 and resp_obj.data then
+		local blacklist_set = get_mac_blacklist_set_from_uci()
+		if type(resp_obj.data.list) == "table" then
+			for _, user in ipairs(resp_obj.data.list) do
+				local mac = normalize_mac(user.mac)
+				user.in_blacklist = blacklist_set[mac] and 1 or 0
+			end
+		end
 		luci.http.write_json({data = resp_obj.data})
 	else
 		luci.http.write_json({data = resp_obj or {}})
+	end
+end
+
+function get_system_base_info()
+	luci.http.prepare_content("application/json")
+
+	local req_obj = {}
+	req_obj.api = "get_system_base_info"
+	req_obj.data = {}
+
+	local resp_obj = utl.ubus("fwx", "common", req_obj)
+
+	if resp_obj and resp_obj.code == 2000 and resp_obj.data then
+		luci.http.write_json(resp_obj.data)
+	else
+		luci.http.write_json({
+			user_session_enable = 0
+		})
+	end
+end
+
+function get_mac_blacklist()
+	luci.http.prepare_content("application/json")
+
+	local mac_list = get_mac_blacklist_list_from_uci()
+	local user_map = get_all_users_map_for_blacklist()
+	local list = {}
+
+	for _, mac in ipairs(mac_list) do
+		local user = user_map[mac] or {}
+		table.insert(list, {
+			mac = mac,
+			hostname = user.hostname or "--",
+			nickname = user.nickname or "--"
+		})
+	end
+
+	luci.http.write_json({
+		code = 0,
+		data = { list = list },
+		message = "success"
+	})
+end
+
+function add_mac_blacklist()
+	local json = require "luci.jsonc"
+	luci.http.prepare_content("application/json")
+
+	local mac_list = {}
+	local mac = normalize_mac(luci.http.formvalue("mac"))
+	if mac ~= "" then
+		table.insert(mac_list, mac)
+	else
+		local data_str = luci.http.formvalue("data")
+		if data_str and data_str ~= "" then
+			local data = json.parse(data_str)
+			if data and type(data.mac_list) == "table" then
+				for _, item in ipairs(data.mac_list) do
+					local normalized_mac = normalize_mac(item)
+					if normalized_mac ~= "" then
+						table.insert(mac_list, normalized_mac)
+					end
+				end
+			end
+		end
+	end
+
+	if #mac_list == 0 then
+		luci.http.write_json({code = 1, message = "Invalid mac"})
+		return
+	end
+
+	local old_list = get_mac_blacklist_list_from_uci()
+	local old_set = {}
+	for _, item in ipairs(old_list) do
+		old_set[item] = true
+	end
+	for _, item in ipairs(mac_list) do
+		if not old_set[item] then
+			old_set[item] = true
+			table.insert(old_list, item)
+		end
+	end
+
+	save_mac_blacklist_list_to_uci(old_list)
+	luci.http.write_json({code = 0, message = "success"})
+end
+
+function del_mac_blacklist()
+	luci.http.prepare_content("application/json")
+	local mac = normalize_mac(luci.http.formvalue("mac"))
+	if mac == "" then
+		luci.http.write_json({code = 1, message = "Invalid mac"})
+		return
+	end
+
+	local old_list = get_mac_blacklist_list_from_uci()
+	local new_list = {}
+	for _, item in ipairs(old_list) do
+		if item ~= mac then
+			table.insert(new_list, item)
+		end
+	end
+
+	save_mac_blacklist_list_to_uci(new_list)
+	luci.http.write_json({code = 0, message = "success"})
+end
+
+function get_parental_control_detail()
+	luci.http.prepare_content("application/json")
+	local req_obj = {}
+	req_obj.api = "get_parental_control_detail"
+	req_obj.data = {
+		mac = luci.http.formvalue("mac")
+	}
+
+	local resp_obj = utl.ubus("fwx", "common", req_obj)
+	if resp_obj and resp_obj.code == 2000 and resp_obj.data then
+		luci.http.write_json(resp_obj.data)
+	else
+		luci.http.write_json({
+			pc_status = "Unrestricted",
+			pc_status_key = "unlimited",
+			appfilter_rules = {},
+			macfilter_rules = {}
+		})
+	end
+end
+
+function get_user_parental_control_rules()
+	luci.http.prepare_content("application/json")
+
+	local target_mac = normalize_mac(luci.http.formvalue("mac"))
+	if target_mac == "" then
+		luci.http.write_json({
+			mac = "",
+			list = {}
+		})
+		return
+	end
+
+	local req_obj = {
+		api = "get_user_parental_control_rules",
+		data = {
+			mac = target_mac
+		}
+	}
+	local resp_obj = utl.ubus("fwx", "common", req_obj)
+
+	if resp_obj and resp_obj.code == 2000 and type(resp_obj.data) == "table" then
+		luci.http.write_json(resp_obj.data)
+	else
+		luci.http.write_json({
+			mac = target_mac,
+			list = {}
+		})
 	end
 end
 
@@ -269,4 +532,3 @@ function get_user_basic_info(mac)
 		luci.http.write_json({})
 	end
 end
-

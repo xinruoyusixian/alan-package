@@ -15,6 +15,29 @@
 	let appTimeChart = null;
 	let visit_refresh_timer = null;
 	let visit_refresh_inflight = false;
+	let current_nickname = '';
+	let nickname_editing = false;
+	let nickname_submitting = false;
+	let nickname_composing = false;
+	let nickname_submit_pending = false;
+	const behavior_weekday_labels = {
+		0: '<%:Sun%>',
+		1: '<%:Mon%>',
+		2: '<%:Tue%>',
+		3: '<%:Wed%>',
+		4: '<%:Thu%>',
+		5: '<%:Fri%>',
+		6: '<%:Sat%>'
+	};
+
+	function nickname_log(msg, extra) {
+		if (typeof console === 'undefined' || !console.log) return;
+		if (typeof extra === 'undefined') {
+			console.log('[fwx-nickname] ' + msg);
+		} else {
+			console.log('[fwx-nickname] ' + msg, extra);
+		}
+	}
 	
 	function getUrlParameter(name) {
 		name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
@@ -63,6 +86,8 @@
 				loadAppVisitTime();
 			} else if (tabId === 'tab-traffic-statistics' || tabId === 'tab-app-ranking') {
 				loadHourlyStatsData();
+			} else if (tabId === 'tab-behavior-rules') {
+				loadBehaviorRules();
 			} else if (tabId === 'tab-visit-records') {
 				loadVisitListData(visit_cur_page);
 			}
@@ -90,7 +115,8 @@
 			ipv6 = '--';
 		}
 		document.getElementById('basic_info_ipv6').textContent = ipv6;
-		document.getElementById('basic_info_nickname').textContent = user.nickname || '--';
+		current_nickname = (user.nickname || '').trim();
+		renderNicknameView(current_nickname);
 		document.getElementById('basic_info_hostname').textContent = user.hostname || '--';
 		
 		var todayOnlineTime = user.today_online_time || 0;
@@ -103,6 +129,10 @@
 		var todayDownBytes = user.today_down_bytes || 0;
 		document.getElementById('basic_info_up_bytes').textContent = formatTraffic(todayUpBytes);
 		document.getElementById('basic_info_down_bytes').textContent = formatTraffic(todayDownBytes);
+		document.getElementById('basic_info_band').textContent = formatWirelessBand(user.band);
+		document.getElementById('basic_info_wifi_ifname').textContent = user.wifi_ifname || '--';
+		document.getElementById('basic_info_tx_rate').textContent = formatWirelessRate(user.tx_rate);
+		document.getElementById('basic_info_rx_rate').textContent = formatWirelessRate(user.rx_rate);
 		
 		var statusElement = document.getElementById('basic_info_status');
 		if (user.online == 1) {
@@ -114,6 +144,241 @@
 		} else {
 			statusElement.textContent = '<%:Offline%>';
 		}
+	}
+
+	function validateNickname(nickname) {
+		const invalidChars = /[\s'"]/;
+		return !invalidChars.test(nickname) && nickname.length <= 32;
+	}
+
+	function renderNicknameView(nickname) {
+		var textEl = document.getElementById('basic_info_nickname_text');
+		var inputEl = document.getElementById('basic_info_nickname_input');
+		var editBtn = document.getElementById('basic_info_nickname_edit');
+		var confirmBtn = document.getElementById('basic_info_nickname_confirm');
+		if (!textEl || !inputEl || !editBtn || !confirmBtn) return;
+
+		var displayText = (nickname && nickname.trim() !== '') ? nickname : '--';
+		textEl.textContent = displayText;
+		inputEl.value = nickname || '';
+
+		if (nickname_editing) {
+			textEl.style.display = 'none';
+			editBtn.style.display = 'none';
+			confirmBtn.style.display = 'inline-flex';
+			inputEl.style.display = 'block';
+		} else {
+			textEl.style.display = 'block';
+			editBtn.style.display = 'inline-flex';
+			confirmBtn.style.display = 'none';
+			inputEl.style.display = 'none';
+		}
+	}
+
+	function showNicknameToast(message, isError) {
+		var toastEl = document.getElementById('nickname_toast');
+		if (!toastEl) return;
+		toastEl.textContent = message;
+		toastEl.className = isError ? 'nickname-toast show error' : 'nickname-toast show';
+		window.setTimeout(function() {
+			toastEl.className = 'nickname-toast';
+		}, 1200);
+	}
+
+	function startNicknameEdit(event) {
+		if (event) {
+			event.preventDefault();
+			event.stopPropagation();
+		}
+		if (nickname_submitting) {
+			nickname_log('start edit ignored: submitting');
+			return;
+		}
+		nickname_composing = false;
+		nickname_editing = true;
+		nickname_submit_pending = false;
+		nickname_log('start edit', { mac: mac });
+		renderNicknameView(current_nickname);
+		var inputEl = document.getElementById('basic_info_nickname_input');
+		var textEl = document.getElementById('basic_info_nickname_text');
+		var editBtn = document.getElementById('basic_info_nickname_edit');
+		var confirmBtn = document.getElementById('basic_info_nickname_confirm');
+		if (inputEl) {
+			inputEl.style.display = 'block';
+			window.setTimeout(function() {
+				inputEl.focus();
+				inputEl.select();
+			}, 0);
+		}
+		if (textEl) textEl.style.display = 'none';
+		if (editBtn) editBtn.style.display = 'none';
+		if (confirmBtn) confirmBtn.style.display = 'inline-flex';
+	}
+
+	function onNicknameInputKeydown(event) {
+		if (!event) return;
+		if (event.isComposing || event.keyCode === 229) {
+			nickname_composing = true;
+			nickname_log('keydown composing');
+			return;
+		}
+		if (nickname_composing) return;
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			nickname_log('keydown enter ignored, use confirm button');
+			return;
+		}
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			cancelNicknameEdit();
+		}
+	}
+
+	function onNicknameCompositionStart() {
+		nickname_composing = true;
+		nickname_log('composition start');
+	}
+
+	function onNicknameCompositionEnd() {
+		nickname_composing = false;
+		nickname_log('composition end');
+	}
+
+	function onNicknameConfirmMouseDown(event) {
+		if (event) {
+			event.preventDefault();
+			event.stopPropagation();
+		}
+		nickname_submit_pending = true;
+		nickname_log('confirm mousedown, pending submit');
+		submitNicknameEdit();
+	}
+
+	function cancelNicknameEdit() {
+		if (!nickname_editing) return;
+		nickname_editing = false;
+		nickname_composing = false;
+		nickname_submit_pending = false;
+		nickname_log('cancel edit');
+		renderNicknameView(current_nickname);
+	}
+
+	function onNicknameInputBlur() {
+		if (!nickname_editing || nickname_submitting) return;
+		nickname_log('input blur');
+		window.setTimeout(function() {
+			if (!nickname_editing || nickname_submitting) return;
+			if (nickname_submit_pending) return;
+			nickname_log('blur timeout -> cancel');
+			cancelNicknameEdit();
+		}, 80);
+	}
+
+	function onNicknameMouseLeave(event) {
+		return;
+	}
+
+	function onNicknameDocumentMouseDown(event) {
+		if (!nickname_editing || nickname_submitting) return;
+		var wrapperEl = document.getElementById('basic_info_nickname_wrapper');
+		if (!wrapperEl) return;
+		if (wrapperEl.contains(event.target)) return;
+		nickname_log('document mousedown outside -> cancel');
+		cancelNicknameEdit();
+	}
+
+	document.addEventListener('mousedown', onNicknameDocumentMouseDown, true);
+
+	function submitNicknameEdit(event) {
+		if (event) {
+			event.preventDefault();
+			event.stopPropagation();
+		}
+		nickname_log('submit enter', {
+			editing: nickname_editing,
+			submitting: nickname_submitting,
+			composing: nickname_composing,
+			pending: nickname_submit_pending,
+			mac: mac || ''
+		});
+		if (!nickname_editing) {
+			nickname_log('submit return: not editing');
+			return;
+		}
+		if (nickname_submitting) {
+			nickname_log('submit return: submitting');
+			return;
+		}
+		if (!mac) {
+			nickname_log('submit return: missing mac');
+			return;
+		}
+		if (nickname_composing) {
+			nickname_submit_pending = true;
+			nickname_log('submit delayed: composing');
+			window.setTimeout(function() {
+				if (!nickname_submitting && nickname_editing) {
+					nickname_submit_pending = false;
+					nickname_composing = false;
+					nickname_log('submit retry after composing');
+					submitNicknameEdit();
+				}
+			}, 120);
+			return;
+		}
+		nickname_submit_pending = false;
+		var inputEl = document.getElementById('basic_info_nickname_input');
+		if (!inputEl) {
+			nickname_log('submit return: missing input');
+			return;
+		}
+
+		var nickname = (inputEl.value || '').trim();
+		if (!validateNickname(nickname)) {
+			nickname_log('submit return: invalid nickname', nickname);
+			showNicknameToast('<%:Please enter a valid remark%>', true);
+			inputEl.focus();
+			return;
+		}
+
+		if (nickname === current_nickname) {
+			nickname_log('submit skip: unchanged nickname');
+			nickname_editing = false;
+			nickname_composing = false;
+			nickname_submit_pending = false;
+			renderNicknameView(current_nickname);
+			return;
+		}
+
+		nickname_submitting = true;
+		nickname_log('submit request', { mac: mac, nickname: nickname });
+		new XHR().post("<%=url('admin/fwx/set_nickname')%>",
+		{ mac: mac, nickname: nickname },
+		function(x, data) {
+			var ok = !!(x && x.status >= 200 && x.status < 300);
+			if (ok && data && typeof data.code !== 'undefined' && data.code !== 2000) {
+				ok = false;
+			}
+			nickname_log('submit response', {
+				http_status: x ? x.status : 0,
+				code: data && typeof data.code !== 'undefined' ? data.code : null,
+				ok: ok
+			});
+
+			nickname_submitting = false;
+			nickname_editing = false;
+			nickname_composing = false;
+			nickname_submit_pending = false;
+
+			if (ok) {
+				current_nickname = nickname;
+				renderNicknameView(current_nickname);
+				showNicknameToast('<%:Remark updated successfully%>', false);
+			} else {
+				renderNicknameView(current_nickname);
+				showNicknameToast('<%:Failed to update remark%>', true);
+			}
+		});
 	}
 
 	function loadAppVisitTime() {
@@ -918,6 +1183,271 @@
 		}
 	}
 
+	function formatWirelessRate(rate) {
+		var rateNum = parseInt(rate, 10);
+		if (isNaN(rateNum) || rateNum <= 0) {
+			return '--';
+		}
+		return (rateNum / 1000).toFixed(1) + ' Mbit/s';
+	}
+
+	function formatWirelessBand(band) {
+		var bandStr = (band || '').toString().toLowerCase();
+		if (!bandStr) {
+			return '--';
+		}
+		if (bandStr === '2g' || bandStr === '2.4g' || bandStr === '2.4ghz') {
+			return '2.4G';
+		}
+		if (bandStr === '5g' || bandStr === '5ghz') {
+			return '5G';
+		}
+		if (bandStr === '6g' || bandStr === '6ghz') {
+			return '6G';
+		}
+		return bandStr.toUpperCase();
+	}
+
+	function escape_html(value) {
+		var str = value === null || typeof value === 'undefined' ? '' : String(value);
+		return str
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	}
+
+	function get_behavior_weekday_sort_value(day) {
+		var day_num = parseInt(day, 10);
+		if (day_num === 0) return 7;
+		if (day_num >= 1 && day_num <= 6) return day_num;
+		return 99;
+	}
+
+	function format_behavior_weekdays(weekdays) {
+		if (!Array.isArray(weekdays) || weekdays.length === 0) {
+			return '--';
+		}
+		var uniq = {};
+		var items = [];
+		for (var i = 0; i < weekdays.length; i++) {
+			var day_num = parseInt(weekdays[i], 10);
+			if (isNaN(day_num) || day_num < 0 || day_num > 6 || uniq[day_num]) {
+				continue;
+			}
+			uniq[day_num] = true;
+			items.push(day_num);
+		}
+		items.sort(function(a, b) {
+			return get_behavior_weekday_sort_value(a) - get_behavior_weekday_sort_value(b);
+		});
+		if (items.length === 0) {
+			return '--';
+		}
+		return items.map(function(day_num) {
+			return behavior_weekday_labels[day_num] || String(day_num);
+		}).join(', ');
+	}
+
+	function format_behavior_time_rules(time_rules) {
+		if (!Array.isArray(time_rules) || time_rules.length === 0) {
+			return '--';
+		}
+		var lines = [];
+		for (var i = 0; i < time_rules.length; i++) {
+			var rule = time_rules[i] || {};
+			var weekdays_text = format_behavior_weekdays(rule.weekdays);
+			var start_time = escape_html(rule.start_time || '--');
+			var end_time = escape_html(rule.end_time || '--');
+			lines.push(weekdays_text + ' ' + start_time + '-' + end_time);
+		}
+		return lines.join('<br>');
+	}
+
+	function format_behavior_duration_rules(duration_rules) {
+		if (!Array.isArray(duration_rules) || duration_rules.length === 0) {
+			return '--';
+		}
+		var lines = [];
+		for (var i = 0; i < duration_rules.length; i++) {
+			var rule = duration_rules[i] || {};
+			var weekdays_text = format_behavior_weekdays(rule.weekdays);
+			var limit_value = parseInt(rule.duration_minutes, 10);
+			if (isNaN(limit_value)) limit_value = 0;
+			if (limit_value <= 0) {
+				lines.push(weekdays_text + ' <%:Unlimited today%>');
+			} else {
+				lines.push(weekdays_text + ' ' + limit_value + ' <%:min%>');
+			}
+		}
+		return lines.join('<br>');
+	}
+
+	function format_behavior_flow_rules(flow_rules) {
+		if (!Array.isArray(flow_rules) || flow_rules.length === 0) {
+			return '--';
+		}
+		var lines = [];
+		for (var i = 0; i < flow_rules.length; i++) {
+			var rule = flow_rules[i] || {};
+			var weekdays_text = format_behavior_weekdays(rule.weekdays);
+			var limit_value = parseFloat(rule.flow_mb);
+			if (isNaN(limit_value)) limit_value = 0;
+			if (limit_value <= 0) {
+				lines.push(weekdays_text + ' <%:Unlimited today%>');
+			} else {
+				lines.push(weekdays_text + ' ' + limit_value + ' MB');
+			}
+		}
+		return lines.join('<br>');
+	}
+
+	function format_behavior_condition(item) {
+		var condition = item && item.condition ? item.condition : {};
+		if (!item) return '--';
+		if (item.condition_type === 'duration') {
+			return format_behavior_duration_rules(condition.duration_rules);
+		}
+		if (item.condition_type === 'flow') {
+			return format_behavior_flow_rules(condition.flow_rules);
+		}
+		if (item.condition_type === 'blacklist') {
+			return '<%:Joined Internet Blacklist%>';
+		}
+		return format_behavior_time_rules(condition.time_rules);
+	}
+
+	function format_behavior_progress(used_value, limit_value, progress_percent, exceeded, suffix) {
+		var safe_progress = parseInt(progress_percent, 10);
+		if (isNaN(safe_progress) || safe_progress < 0) safe_progress = 0;
+		if (safe_progress > 100) safe_progress = 100;
+		var fill_class = exceeded ? 'behavior-progress-fill exceeded' : 'behavior-progress-fill';
+		return '' +
+			'<div class="behavior-progress-wrap">' +
+				'<div class="behavior-progress-track">' +
+					'<div class="' + fill_class + '" style="width:' + safe_progress + '%;"></div>' +
+				'</div>' +
+				'<div class="behavior-progress-text">' +
+					'<%:Used%>: ' + escape_html(used_value) + suffix + ' / ' +
+					'<%:Limit%>: ' + escape_html(limit_value) + suffix +
+				'</div>' +
+			'</div>';
+	}
+
+	function format_behavior_today_status(item) {
+		if (!item) return '--';
+		var status = item.today_status || {};
+		if (item.condition_type === 'duration') {
+			if (!status.effective_today) {
+				return '<span class="behavior-status-muted"><%:Not effective today%></span>';
+			}
+			if (status.unlimited) {
+				return '<span class="behavior-status-muted"><%:Unlimited today%></span>';
+			}
+			var used_minutes = parseInt(status.used, 10);
+			var limit_minutes = parseInt(status.limit, 10);
+			if (isNaN(used_minutes)) used_minutes = 0;
+			if (isNaN(limit_minutes) || limit_minutes <= 0) {
+				return '<span class="behavior-status-muted"><%:Unlimited today%></span>';
+			}
+			return format_behavior_progress(
+				used_minutes,
+				limit_minutes,
+				status.progress_percent,
+				!!status.exceeded,
+				' <%:min%>'
+			);
+		}
+		if (item.condition_type === 'flow') {
+			if (!status.effective_today) {
+				return '<span class="behavior-status-muted"><%:Not effective today%></span>';
+			}
+			if (status.unlimited) {
+				return '<span class="behavior-status-muted"><%:Unlimited today%></span>';
+			}
+			var used_flow = parseFloat(status.used);
+			var limit_flow = parseFloat(status.limit);
+			if (isNaN(used_flow)) used_flow = 0;
+			if (isNaN(limit_flow) || limit_flow <= 0) {
+				return '<span class="behavior-status-muted"><%:Unlimited today%></span>';
+			}
+			return format_behavior_progress(
+				used_flow.toFixed(2),
+				limit_flow,
+				status.progress_percent,
+				!!status.exceeded,
+				' MB'
+			);
+		}
+		if (!!status.matched) {
+			return '<span class="behavior-status-match"><%:Matched%></span>';
+		}
+		return '<span class="behavior-status-unmatch"><%:Not Matched%></span>';
+	}
+
+	function format_behavior_permission(item) {
+		var permission_key = item && item.permission_key ? String(item.permission_key) : 'unlimited';
+		var text_map = {
+			unlimited: '<%:Unrestricted%>',
+			app_limited: '<%:App Restricted%>',
+			mac_blocked: '<%:Disconnected%>'
+		};
+		var class_map = {
+			unlimited: 'behavior-permission-unlimited',
+			app_limited: 'behavior-permission-app',
+			mac_blocked: 'behavior-permission-blocked'
+		};
+		var display_text = text_map[permission_key] || (item && item.permission_text ? escape_html(item.permission_text) : '--');
+		var class_name = class_map[permission_key] || 'behavior-permission-unlimited';
+		return '<span class="' + class_name + '">' + display_text + '</span>';
+	}
+
+	function format_behavior_module(item) {
+		if (!item) return '--';
+		var module_map = {
+			appfilter: '<%:App Filter%>',
+			macfilter: '<%:Access Control%>',
+			blacklist: '<%:Blacklist%>'
+		};
+		var module_text = module_map[item.module] || '--';
+		var rule_name = item.rule_name ? escape_html(item.rule_name) : ('<%:Rule%>#' + escape_html(item.rule_id || '--'));
+		return '<div class="behavior-module-name">' + module_text + '</div>' +
+			'<div class="behavior-rule-name">' + rule_name + '</div>';
+	}
+
+	function render_behavior_rule_table(rule_list) {
+		var tbody = document.getElementById('behavior_rule_tbody');
+		if (!tbody) return;
+		if (!Array.isArray(rule_list) || rule_list.length === 0) {
+			tbody.innerHTML = '<tr class="tr"><td class="td" colspan="4" style="text-align:center;"><%:No parental control rules%></td></tr>';
+			return;
+		}
+		var html = '';
+		for (var i = 0; i < rule_list.length; i++) {
+			var item = rule_list[i] || {};
+			html += '<tr class="tr">';
+			html += '<td class="td">' + format_behavior_module(item) + '</td>';
+			html += '<td class="td">' + format_behavior_condition(item) + '</td>';
+			html += '<td class="td">' + format_behavior_today_status(item) + '</td>';
+			html += '<td class="td">' + format_behavior_permission(item) + '</td>';
+			html += '</tr>';
+		}
+		tbody.innerHTML = html;
+	}
+
+	function loadBehaviorRules() {
+		if (!mac) return;
+		var tbody = document.getElementById('behavior_rule_tbody');
+		if (tbody) {
+			tbody.innerHTML = '<tr class="tr"><td class="td" colspan="4" style="text-align:center;"><%:Loading...%></td></tr>';
+		}
+		new XHR().get("<%=url('admin/fwx/get_user_parental_control_rules')%>", {mac: mac}, function(x, data) {
+			var list = (data && Array.isArray(data.list)) ? data.list : [];
+			render_behavior_rule_table(list);
+		});
+	}
+
 	function showTabContent(tabId) {
 		var tabs = document.querySelectorAll('.tab-body');
 		tabs.forEach(function(tab) {
@@ -987,6 +1517,10 @@
 				}, 100);
 			}
 		}
+		if (tabId === 'tab-behavior-rules') {
+			stopVisitAutoRefresh();
+			loadBehaviorRules();
+		}
 		
 	}
 //]]></script>
@@ -1002,6 +1536,7 @@
 			
 			<ul class="tab-list">
 				<li class="tab-item active" onclick="showTabContent('tab-user-info')"><%:Basic Info%></li>
+				<li class="tab-item" onclick="showTabContent('tab-behavior-rules')"><%:Parental Control Rules%></li>
 				<li class="tab-item" onclick="showTabContent('tab-app-duration')"><%:App Statistics%></li>
 				<li class="tab-item" onclick="showTabContent('tab-traffic-statistics')"><%:Today Traffic%></li>
 				<li class="tab-item" onclick="showTabContent('tab-app-ranking')"><%:Today Top Apps%></li>
@@ -1022,7 +1557,14 @@
 							<td class="td" style="font-weight: bold;"><%:Hostname%></td>
 							<td class="td" id="basic_info_hostname">--</td>
 							<td class="td" style="font-weight: bold;"><%:Remark%></td>
-							<td class="td" id="basic_info_nickname">--</td>
+							<td class="td">
+								<div id="basic_info_nickname_wrapper" class="nickname-inline" onmouseleave="onNicknameMouseLeave(event)">
+									<span id="basic_info_nickname_text">--</span>
+									<button type="button" id="basic_info_nickname_edit" class="nickname-edit-btn" onclick="startNicknameEdit()" title="<%:Edit Remark%>">&#9998;</button>
+									<input type="text" id="basic_info_nickname_input" class="nickname-input" onblur="onNicknameInputBlur()" onkeydown="onNicknameInputKeydown(event)" oncompositionstart="onNicknameCompositionStart()" oncompositionend="onNicknameCompositionEnd()" maxlength="32" style="display:none;">
+									<button type="button" id="basic_info_nickname_confirm" class="nickname-confirm-btn" onmousedown="onNicknameConfirmMouseDown(event)" style="display:none;"><%:OK%></button>
+								</div>
+							</td>
 						</tr>
 						<tr class="tr">
 							<td class="td" style="font-weight: bold;"><%:IP Address%></td>
@@ -1042,6 +1584,38 @@
 							<td class="td" style="font-weight: bold;"><%:Today Downstream Traffic%></td>
 							<td class="td" id="basic_info_down_bytes">--</td>
 						</tr>
+						<tr class="tr">
+							<td class="td" style="font-weight: bold;">频段</td>
+							<td class="td" id="basic_info_band">--</td>
+							<td class="td" style="font-weight: bold;">无线接口</td>
+							<td class="td" id="basic_info_wifi_ifname">--</td>
+						</tr>
+						<tr class="tr">
+							<td class="td" style="font-weight: bold;">无线发送速率</td>
+							<td class="td" id="basic_info_tx_rate">--</td>
+							<td class="td" style="font-weight: bold;">无线接收速率</td>
+							<td class="td" id="basic_info_rx_rate">--</td>
+						</tr>
+					</table>
+				</div>
+			</div>
+
+			<div id="tab-behavior-rules" class="tab-body">
+				<div style="padding: 20px;">
+					<table class="table cbi-section-table behavior-rule-table" style="width: 100%;">
+						<thead>
+							<tr class="tr table-titles">
+								<th class="th"><%:Function Module%></th>
+								<th class="th"><%:Effective Condition%></th>
+								<th class="th"><%:Today's Status%></th>
+								<th class="th"><%:Internet Permission%></th>
+							</tr>
+						</thead>
+						<tbody id="behavior_rule_tbody">
+							<tr class="tr">
+								<td class="td" colspan="4" style="text-align: center;"><%:Collecting data...%></td>
+							</tr>
+						</tbody>
 					</table>
 				</div>
 			</div>
@@ -1120,6 +1694,8 @@
 	</div>
 </div>
 
+<div id="nickname_toast" class="nickname-toast"></div>
+
 <style>
 	.tab-container {
 		margin-top: 20px;
@@ -1169,6 +1745,179 @@
 		width: 100%;
 		max-width: 1600px;
 		min-width: 600px;
+	}
+
+	.behavior-rule-table .th,
+	.behavior-rule-table .td {
+		text-align: left;
+		vertical-align: middle;
+	}
+
+	.behavior-module-name {
+		font-weight: 600;
+	}
+
+	.behavior-rule-name {
+		margin-top: 4px;
+		font-size: 12px;
+		opacity: 0.85;
+		word-break: break-all;
+	}
+
+	.behavior-progress-wrap {
+		min-width: 220px;
+		max-width: 320px;
+	}
+
+	.behavior-progress-track {
+		width: 100%;
+		height: 8px;
+		border-radius: 9999px;
+		background: rgba(148, 163, 184, 0.25);
+		overflow: hidden;
+	}
+
+	.behavior-progress-fill {
+		height: 100%;
+		background: #22c55e;
+		transition: width 0.2s ease;
+	}
+
+	.behavior-progress-fill.exceeded {
+		background: #ef4444;
+	}
+
+	.behavior-progress-text {
+		margin-top: 6px;
+		font-size: 12px;
+		opacity: 0.9;
+	}
+
+	.behavior-status-match {
+		color: #22c55e;
+		font-weight: 600;
+	}
+
+	.behavior-status-unmatch {
+		color: #94a3b8;
+	}
+
+	.behavior-status-muted {
+		color: #94a3b8;
+	}
+
+	.behavior-permission-unlimited {
+		color: #22c55e;
+		font-weight: 600;
+	}
+
+	.behavior-permission-app {
+		color: #f59e0b;
+		font-weight: 600;
+	}
+
+	.behavior-permission-blocked {
+		color: #ef4444;
+		font-weight: 600;
+	}
+
+	.nickname-inline {
+		position: relative;
+		display: inline-block;
+		width: 230px;
+		min-height: 24px;
+		padding-right: 56px;
+		vertical-align: middle;
+	}
+
+	#basic_info_nickname_text {
+		display: block;
+		width: 100%;
+		height: 24px;
+		line-height: 24px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.nickname-edit-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		position: absolute;
+		right: 0;
+		top: 2px;
+		width: 20px;
+		height: 20px;
+		line-height: 20px;
+		border: 1px solid var(--border-color-medium, #d1d5db);
+		background: var(--background-color-low, #f5f5f5);
+		color: var(--text-color-medium, #6b7280);
+		border-radius: 3px;
+		cursor: pointer;
+		padding: 0;
+		font-size: 12px;
+	}
+
+	.nickname-edit-btn:hover {
+		background: var(--background-color-medium, #eeeeee);
+		color: var(--text-color-high, #333);
+	}
+
+	.nickname-confirm-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		position: absolute;
+		right: 0;
+		top: 0;
+		height: 24px;
+		padding: 0 10px;
+		border: 1px solid var(--border-color-medium, #d1d5db);
+		background: var(--background-color-low, #f5f5f5);
+		color: var(--text-color-medium, #6b7280);
+		border-radius: 4px;
+		cursor: pointer;
+		font-size: 12px;
+	}
+
+	.nickname-confirm-btn:hover {
+		background: var(--background-color-medium, #eeeeee);
+		color: var(--text-color-high, #333);
+	}
+
+	.nickname-input {
+		width: 100%;
+		height: 24px;
+		padding: 2px 6px;
+		border: 1px solid var(--border-color-medium, #d1d5db);
+		border-radius: 4px;
+		background: var(--background-color-high, #ffffff);
+		color: var(--text-color-high, #333);
+		box-sizing: border-box;
+	}
+
+	.nickname-toast {
+		position: fixed;
+		top: 20px;
+		right: 20px;
+		z-index: 10050;
+		padding: 8px 12px;
+		border-radius: 4px;
+		background: #16a34a;
+		color: #fff;
+		font-size: 12px;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.2s ease;
+	}
+
+	.nickname-toast.show {
+		opacity: 1;
+	}
+
+	.nickname-toast.error {
+		background: #dc2626;
 	}
 </style>
 

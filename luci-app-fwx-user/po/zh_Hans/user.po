@@ -38,6 +38,9 @@ msgstr "MAC地址"
 msgid "IP Address"
 msgstr "IP地址"
 
+msgid "Signal"
+msgstr "信号强度"
+
 msgid "Remark"
 msgstr "备注"
 
@@ -126,7 +129,7 @@ msgid "Percentage"
 msgstr "占比"
 
 msgid "Device Info"
-msgstr "设备信息"
+msgstr "终端信息"
 
 msgid "Upstream Rate"
 msgstr "上行速率"
@@ -135,7 +138,7 @@ msgid "Downstream Rate"
 msgstr "下行速率"
 
 msgid "Common App(TOP5)"
-msgstr "常用APP(前5)"
+msgstr "常用APP(TOP5)"
 
 msgid "Active Apps"
 msgstr "活跃APP"
@@ -251,3 +254,189 @@ msgstr "过滤状态"
 
 msgid "Active"
 msgstr "活跃"
+
+msgid "Internet Permission"
+msgstr "联网权限"
+
+msgid "Unrestricted"
+msgstr "无限制"
+
+msgid "Internet Permission Detail"
+msgstr "联网权限详情"
+
+msgid "Terminal"
+msgstr "终端"
+
+msgid "Current Status"
+msgstr "当前状态"
+
+msgid "Effective App Filter Rules"
+msgstr "应用过滤生效规则"
+
+msgid "Rule Name"
+msgstr "规则名称"
+
+msgid "Mode"
+msgstr "模式"
+
+msgid "Rule Detail"
+msgstr "规则详情"
+
+msgid "Time Rule"
+msgstr "时间规则"
+
+msgid "Effective Access Control Rules"
+msgstr "上网控制生效规则"
+
+msgid "Hit Detail"
+msgstr "命中详情"
+
+msgid "All Users"
+msgstr "所有终端"
+
+msgid "Selected User"
+msgstr "指定终端"
+
+msgid "Rule"
+msgstr "规则"
+
+msgid "Category"
+msgstr "分类"
+
+msgid "App Count"
+msgstr "APP个数"
+
+msgid "Time Range"
+msgstr "时间段"
+
+msgid "Flow"
+msgstr "流量"
+
+msgid "Used"
+msgstr "已用"
+
+msgid "Limit"
+msgstr "限制"
+
+msgid "Weekday"
+msgstr "周"
+
+msgid "Sun"
+msgstr "日"
+
+msgid "Mon"
+msgstr "一"
+
+msgid "Tue"
+msgstr "二"
+
+msgid "Wed"
+msgstr "三"
+
+msgid "Thu"
+msgstr "四"
+
+msgid "Fri"
+msgstr "五"
+
+msgid "Sat"
+msgstr "六"
+
+msgid "Daily Duration"
+msgstr "每日时长"
+
+msgid "Daily Flow"
+msgstr "每日流量"
+
+msgid "Matched Rule"
+msgstr "匹配规则"
+
+msgid "Rule Type"
+msgstr "规则类型"
+
+msgid "App Filter"
+msgstr "应用过滤"
+
+msgid "Access Control"
+msgstr "上网控制"
+
+msgid "Restricted Apps"
+msgstr "受限应用"
+
+msgid "Remark updated successfully"
+msgstr "备注修改成功"
+
+msgid "Failed to update remark"
+msgstr "备注修改失败"
+
+msgid "Join Blacklist"
+msgstr "加入黑名单"
+
+msgid "Remove Blacklist"
+msgstr "解除黑名单"
+
+msgid "Added to blacklist"
+msgstr "已加入黑名单"
+
+msgid "Are you sure you want to join the blacklist? After joining, this terminal will be disconnected from the Internet."
+msgstr "确定要加入黑名单吗？加入后该终端将会断网。"
+
+msgid "Removed from blacklist"
+msgstr "已解除黑名单"
+
+msgid "Operation failed"
+msgstr "操作失败"
+
+msgid "Blacklist"
+msgstr "黑名单"
+
+msgid "Joined Internet Blacklist"
+msgstr "命中上网黑名单"
+
+msgid "Connection Count"
+msgstr "连接数"
+
+msgid "Session Count"
+msgstr "会话数"
+
+msgid "Parental Control"
+msgstr "Parental Control"
+
+msgid "Parental Control Rules"
+msgstr "行为管理规则"
+
+msgid "Function Module"
+msgstr "功能模块"
+
+msgid "Effective Condition"
+msgstr "生效条件"
+
+msgid "Today's Status"
+msgstr "今日状态"
+
+msgid "No parental control rules"
+msgstr "暂无行为管理规则"
+
+msgid "App Restricted"
+msgstr "应用受限"
+
+msgid "Disconnected"
+msgstr "已断网"
+
+msgid "Not Matched"
+msgstr "未匹配"
+
+msgid "Not effective today"
+msgstr "今日不生效"
+
+msgid "Unlimited today"
+msgstr "今日不限"
+
+msgid "Matched"
+msgstr "已匹配"
+
+msgid "Block"
+msgstr "拉黑"
+
+msgid "Unblock"
+msgstr "解除"
