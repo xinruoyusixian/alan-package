@@ -69,10 +69,6 @@ It also supports automatic and manual switching between light and dark modes.
 - Automatically switch between light and dark modes with the system, and can also be set to a fixed mode.
 - Settings plugin with extensions [luci-app-argon-config][config-link]
 
-> **Upcoming Version **
->
-> "The current theme uses Less for CSS construction, and the method for switching between light and dark modes is relatively primitive. Meanwhile, the official theme has already switched to the UT template. I am exploring a way to build the theme template using modern front-end development tools, initially settling on a solution using Vite + UnoCSS. This approach will utilize a proxy server for debugging and also support HMR (Hot Module Replacement), significantly improving development speed. Currently, the basic development framework has been set up, but due to a busy schedule, I still need some time to migrate the existing styles. Stay tuned!"
-
 ## Branch Introduction
 
 There are currently two main branches that are adapted to different versions of the **OpenWrt** source code.  
@@ -85,7 +81,7 @@ The table below will provide a detailed introduction:
 
 ## Version History
 
-The latest version is v2.4.3 [Click here][en-us-release-log] to view the full version history record.
+The latest version is v2.3.1 [Click here][en-us-release-log] to view the full version history record.
 
 ## Getting started
 
@@ -120,14 +116,14 @@ opkg install luci-theme-argon*.ipk
 ```bash
 opkg install luci-compat
 opkg install luci-lib-ipkg
-wget --no-check-certificate https://github.com/jerrykuku/luci-theme-argon/releases/download/v2.3.2/luci-theme-argon_2.3.2-r20250207_all.ipk
+wget --no-check-certificate https://github.com/jerrykuku/luci-theme-argon/releases/download/v2.3.1/luci-theme-argon_2.3.1_all.ipk
 opkg install luci-theme-argon*.ipk
 ```
 
 ### Install luci-app-argon-config
 
 ```bash
-wget --no-check-certificate -O luci-app-argon-config_0.9_all.ipk https://github.com/jerrykuku/luci-app-argon-config/releases/download/v0.9/luci-app-argon-config_0.9_all.ipk
+wget --no-check-certificate https://github.com/jerrykuku/luci-app-argon-config/releases/download/v0.9/luci-app-argon-config_0.9_all.ipk
 opkg install luci-app-argon-config*.ipk
 ```
 
