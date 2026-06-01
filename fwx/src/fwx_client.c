@@ -24,10 +24,13 @@
 #include <linux/timer.h>
 #include <linux/sort.h>
 #include <linux/spinlock.h>
+#include <linux/string.h>
 
 #include "fwx_client.h"
 #include "fwx_client_fs.h"
 #include "fwx_log.h"
+#include "fwx_mac.h"
+#include "fwx_mac_filter.h"
 #include "fwx_utils.h"
 #include "fwx.h"
 #include "k_json.h"
@@ -40,12 +43,97 @@ struct list_head af_client_list_table[MAX_AF_CLIENT_HASH_SIZE];
 int g_max_app_report_count = 3;
 int g_min_http_match_count = 3;
 
+static DEFINE_RWLOCK(record_whitelist_lock);
+#define record_whitelist_read_lock() read_lock_bh(&record_whitelist_lock);
+#define record_whitelist_read_unlock() read_unlock_bh(&record_whitelist_lock);
+#define record_whitelist_write_lock() write_lock_bh(&record_whitelist_lock);
+#define record_whitelist_write_unlock() write_unlock_bh(&record_whitelist_lock);
+static mac_config_t g_record_whitelist;
+
 
 int af_send_msg_to_user(char *pbuf, uint16_t len);
 extern char *ipv6_to_str(const struct in6_addr *addr, char *str);
 
 static void init_client_timer(af_client_info_t *client);
 static void stop_client_timer(af_client_info_t *client);
+
+static int is_client_mac_filter_blocked(af_client_info_t *node)
+{
+	if (!node || !g_mac_filter_enable) {
+		return 0;
+	}
+
+	if (fwx_match_mac_filter_whitelist(node->mac)) {
+		return 0;
+	}
+
+	return fwx_match_mac_filter_rule(node->mac) ? 1 : 0;
+}
+
+int fwx_match_record_whitelist(const unsigned char *mac)
+{
+	struct mac_node *node;
+	int ret = 0;
+
+	record_whitelist_read_lock();
+	node = fwx_find_mac_node(&g_record_whitelist, mac);
+	ret = (node != NULL);
+	record_whitelist_read_unlock();
+
+	return ret;
+}
+
+static void fwx_sync_record_whitelist_clients(void)
+{
+	int i;
+	af_client_info_t *node = NULL;
+
+	AF_CLIENT_LOCK_W();
+	for (i = 0; i < MAX_AF_CLIENT_HASH_SIZE; i++)
+	{
+		list_for_each_entry(node, &af_client_list_table[i], hlist)
+		{
+			node->record_whitelist = fwx_match_record_whitelist(node->mac);
+		}
+	}
+	AF_CLIENT_UNLOCK_W();
+}
+
+int fwx_set_record_whitelist(const char *mac_list_str)
+{
+	char mac_buf[1024] = {0};
+	char *token = NULL;
+	char *save_ptr = NULL;
+	u8 mac_bin[ETH_ALEN];
+	struct mac_node *node = NULL;
+
+	if (!mac_list_str) {
+		return -1;
+	}
+
+	strcpy(mac_buf, mac_list_str);
+
+	record_whitelist_write_lock();
+	fwx_flush_mac_list(&g_record_whitelist);
+	save_ptr = mac_buf;
+	while ((token = strsep(&save_ptr, ",")) != NULL) {
+		token = strim(token);
+		if (!token || token[0] == '\0') {
+			continue;
+		}
+		if (!mac_str_to_bin(token, mac_bin)) {
+			continue;
+		}
+		node = fwx_find_mac_node(&g_record_whitelist, mac_bin);
+		if (!node) {
+			fwx_add_mac_node(&g_record_whitelist, mac_bin);
+		}
+	}
+	record_whitelist_write_unlock();
+
+	fwx_sync_record_whitelist_clients();
+	return 0;
+}
 
 
 static void
@@ -57,6 +145,7 @@ nf_client_list_init(void)
 	{
 		INIT_LIST_HEAD(&af_client_list_table[i]);
 	}
+	fwx_mac_config_init(&g_record_whitelist);
 	AF_CLIENT_UNLOCK_W();
 	AF_INFO("client list init......ok\n");
 }
@@ -99,6 +188,9 @@ nf_client_list_clear(void)
 		}
 	}
 	AF_CLIENT_UNLOCK_W();
+	record_whitelist_write_lock();
+	fwx_flush_mac_list(&g_record_whitelist);
+	record_whitelist_write_unlock();
 }
 
 void af_client_list_reset_report_num(void)
@@ -203,6 +295,7 @@ nf_client_add(unsigned char *mac)
 
 	memset(node, 0, sizeof(af_client_info_t));
 	memcpy(node->mac, mac, MAC_ADDR_LEN);
+	node->record_whitelist = fwx_match_record_whitelist(node->mac);
 
 	node->create_jiffies = jiffies;
 	node->update_jiffies = jiffies;
@@ -490,6 +583,14 @@ void af_update_client_status(af_client_info_t *node)
 	node->last_flow.down_bytes = node->flow.down_bytes;
 	node->last_flow.up_pkts  = node->flow.up_pkts;
 	node->last_flow.down_pkts = node->flow.down_pkts;
+
+	if (is_client_mac_filter_blocked(node)) {
+		node->active = 0;
+		node->active_time = 0;
+		node->inactive_time = 0;
+		return;
+	}
+
 	if (node->rate.pkt_down_rate > 20){
 		node->active_time++;
 		node->inactive_time = 0;
@@ -781,6 +882,78 @@ int af_client_init(void)
 		AF_ERROR("register client hooks failed!\n");
 	}
 
+	return 0;
+}
+
+int fwx_api_add_record_whitelist(cJSON *data_obj)
+{
+	cJSON *mac_array;
+	int i;
+	u8 mac_bin[ETH_ALEN];
+
+	if (!data_obj) {
+		return -1;
+	}
+
+	mac_array = cJSON_GetObjectItem(data_obj, "mac_list");
+	if (!mac_array) {
+		printk("mac_list not found\n");
+		return -1;
+	}
+
+	record_whitelist_write_lock();
+	for (i = 0; i < cJSON_GetArraySize(mac_array); i++) {
+		cJSON *mac_obj = cJSON_GetArrayItem(mac_array, i);
+		if (mac_obj && mac_str_to_bin(mac_obj->valuestring, mac_bin)) {
+			fwx_add_mac_node(&g_record_whitelist, mac_bin);
+		}
+	}
+	record_whitelist_write_unlock();
+
+	fwx_sync_record_whitelist_clients();
+	return 0;
+}
+
+int fwx_api_del_record_whitelist(cJSON *data_obj)
+{
+	cJSON *mac_obj;
+	u8 mac_bin[ETH_ALEN];
+	struct mac_node *node;
+
+	if (!data_obj) {
+		return -1;
+	}
+
+	mac_obj = cJSON_GetObjectItem(data_obj, "mac");
+	if (!mac_obj) {
+		printk("mac not found\n");
+		return -1;
+	}
+
+	if (!mac_str_to_bin(mac_obj->valuestring, mac_bin)) {
+		printk("invalid mac format\n");
+		return -1;
+	}
+
+	record_whitelist_write_lock();
+	node = fwx_find_mac_node(&g_record_whitelist, mac_bin);
+	if (node) {
+		hlist_del(&node->hlist);
+		kfree(node);
+		record_whitelist_write_unlock();
+		fwx_sync_record_whitelist_clients();
+		return 0;
+	}
+	record_whitelist_write_unlock();
+	return -1;
+}
+
+int fwx_api_flush_record_whitelist(cJSON *data_obj)
+{
+	record_whitelist_write_lock();
+	fwx_flush_mac_list(&g_record_whitelist);
+	record_whitelist_write_unlock();
+	fwx_sync_record_whitelist_clients();
 	return 0;
 }
 

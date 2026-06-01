@@ -1298,6 +1298,7 @@ u_int32_t fwx_hook_bypass_handle(struct sk_buff *skb, struct net_device *dev)
 	af_client_info_t *client = NULL;
 	u_int32_t ret = NF_ACCEPT;
 	u_int8_t malloc_data = 0;
+	int is_record_whitelist = 0;
 
 	if (!skb || !dev)
 		return NF_ACCEPT;
@@ -1340,6 +1341,7 @@ u_int32_t fwx_hook_bypass_handle(struct sk_buff *skb, struct net_device *dev)
 	client->update_jiffies = jiffies;
 	if (flow.src)
 		client->ip = flow.src;
+	is_record_whitelist = client->record_whitelist;
 	AF_CLIENT_UNLOCK_W();
 
 
@@ -1389,8 +1391,10 @@ u_int32_t fwx_hook_bypass_handle(struct sk_buff *skb, struct net_device *dev)
 
 		dpi_main(skb, &flow);
 		conn->client_hello = flow.client_hello;
-		update_url_visiting_info(client, &flow);
-		af_update_active_host_list(client, &flow);
+		if (!is_record_whitelist) {
+			update_url_visiting_info(client, &flow);
+			af_update_active_host_list(client, &flow);
+		}
 
 	 	if (fwx_match_feature(&flow)){
 			conn->app_id = flow.app_id;
@@ -1408,7 +1412,7 @@ u_int32_t fwx_hook_bypass_handle(struct sk_buff *skb, struct net_device *dev)
 				}
 	 		}
 			conn->state = AF_CONN_DPI_FINISHED;
-			if (!conn->ignore)
+			if (!conn->ignore && !is_record_whitelist)
 				af_update_active_app_list(client, &flow);
 			if (match_app_filter_rule(flow.app_id, client)) {
 				flow.drop = 1;
@@ -1432,7 +1436,7 @@ u_int32_t fwx_hook_bypass_handle(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (g_record_enable	){
-		if (!conn->ignore){
+		if (!conn->ignore && !is_record_whitelist){
 			int is_http = (flow.http.match || flow.https.match) ? 1 : 0;
 			af_update_client_app_info(client, flow.app_id, flow.drop, 0, is_http);
 		}
@@ -1468,6 +1472,7 @@ u_int32_t fwx_hook_gateway_handle(struct sk_buff *skb, struct net_device *dev)
 	u_int32_t app_id = 0;
 	u_int8_t drop = 0;
 	u_int8_t malloc_data = 0;
+	int is_record_whitelist = 0;
 	if (!strstr(dev->name, g_lan_ifname))
 		return NF_ACCEPT;
 
@@ -1497,6 +1502,7 @@ u_int32_t fwx_hook_gateway_handle(struct sk_buff *skb, struct net_device *dev)
 		return NF_ACCEPT;
 	}
 	client->update_jiffies = jiffies;
+	is_record_whitelist = client->record_whitelist;
 	AF_CLIENT_UNLOCK_R();
 
 	if (ct->fwx_data.app_id != 0)
@@ -1527,7 +1533,7 @@ u_int32_t fwx_hook_gateway_handle(struct sk_buff *skb, struct net_device *dev)
 			}
 		
 			if (g_record_enable){
-				if (!flow.ignore){
+				if (!flow.ignore && !is_record_whitelist){
 					af_update_client_app_info(client, app_id, ct_action, 1, 0);
 				}
 			}
@@ -1570,7 +1576,9 @@ u_int32_t fwx_hook_gateway_handle(struct sk_buff *skb, struct net_device *dev)
 	}
 	dpi_main(skb, &flow);
 
-	update_url_visiting_info(client, &flow);
+	if (!is_record_whitelist) {
+		update_url_visiting_info(client, &flow);
+	}
 	if (flow.client_hello) {
 		ct->fwx_data.match_status |= 0x2;  
 	}
@@ -1630,7 +1638,7 @@ u_int32_t fwx_hook_gateway_handle(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (g_record_enable){
-		if (!flow.ignore){
+		if (!flow.ignore && !is_record_whitelist){
 			int is_http = (flow.http.match || flow.https.match) ? 1 : 0;
 			af_update_client_app_info(client, flow.app_id, flow.drop, 0, is_http);
 			if (flow.app_id > 0) {
@@ -1639,8 +1647,9 @@ u_int32_t fwx_hook_gateway_handle(struct sk_buff *skb, struct net_device *dev)
 		}
 
 	
-		
-		af_update_active_host_list(client, &flow);
+		if (!is_record_whitelist) {
+			af_update_active_host_list(client, &flow);
+		}
 		
 		AF_LMT_INFO("match %s %pI4(%d)--> %pI4(%d) len = %d, %d\n ", IPPROTO_TCP == flow.l4_protocol ? "tcp" : "udp",
 					&flow.src, flow.sport, &flow.dst, flow.dport, skb->len, flow.app_id);
@@ -2140,6 +2149,14 @@ void af_clear_active_app_list(void)
 }
 
 
+static int af_is_invalid_active_host(const char *host)
+{
+    if (!host)
+        return 1;
+
+    return strchr(host, '.') ? 0 : 1; 
+}
+
 void af_update_active_host_list(af_client_info_t *client, flow_info_t *flow)
 {
 	active_host_node_t *node = NULL, *tmp_node = NULL;
@@ -2169,6 +2186,10 @@ void af_update_active_host_list(af_client_info_t *client, flow_info_t *flow)
 		return;  
 	}
 	
+
+    if (af_is_invalid_active_host(host_buf))
+        return;
+
 	spin_lock_bh(&active_host_list_lock);
 	
 	

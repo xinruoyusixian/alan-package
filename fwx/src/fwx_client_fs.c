@@ -118,21 +118,23 @@ static int af_client_seq_show(struct seq_file *s, void *v)
     unsigned char mac_str[32] = {0};
     unsigned char ip_str[32] = {0};
 	unsigned char ipv6_str[128];
+    int status = 1;
 
     static int index = 0;
     af_client_info_t *node = (af_client_info_t *)v;
     if (v == SEQ_START_TOKEN)
     {
         index = 0;
-        seq_printf(s, "%-4s %-20s %-20s %-32s  %-16s %-16s\n", "Id", "Mac", "IP", "IPv6", "UpRate", "DownRate");
+        seq_printf(s, "%-4s %-20s %-20s %-32s %-12s %-8s %-16s %-16s\n", "Id", "Mac", "IP", "IPv6", "RecordWl", "Status", "UpRate", "DownRate");
         return 0;
     }
     index++;
     sprintf(mac_str, MAC_FMT, MAC_ARRAY(node->mac));
     sprintf(ip_str, "%pI4", &node->ip);
 	ipv6_to_str(&node->ipv6, ipv6_str);
+    status = node->active ? 2 : 1;
 
-    seq_printf(s, "%-4d %-20s %-20s %-32s %-16d %-16d\n", index, mac_str, ip_str, ipv6_str, node->rate.up_rate, node->rate.down_rate);
+    seq_printf(s, "%-4d %-20s %-20s %-32s %-12d %-8d %-16d %-16d\n", index, mac_str, ip_str, ipv6_str, node->record_whitelist, status, node->rate.up_rate, node->rate.down_rate);
     return 0;
 }
 

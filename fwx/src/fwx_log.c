@@ -27,6 +27,26 @@ int g_tcp_rst = 1;
 int g_feature_init = 0;
 char g_fwx_version[64] = FWX_VERSION;
 int g_feature_count = 0;
+char g_record_whitelist[1024] = {0};
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0))
+static int fwx_proc_record_whitelist_handler(struct ctl_table *table, int write,
+					      void *buffer, size_t *lenp, loff_t *ppos)
+#else
+static int fwx_proc_record_whitelist_handler(const struct ctl_table *table, int write,
+					      void *buffer, size_t *lenp, loff_t *ppos)
+#endif
+{
+	int ret = 0;
+
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret || !write) {
+		return ret;
+	}
+
+	fwx_set_record_whitelist(g_record_whitelist);
+	return ret;
+}
 
 static struct ctl_table fwx_table[] = {
 	{
@@ -105,6 +125,13 @@ static struct ctl_table fwx_table[] = {
 		.maxlen 	= sizeof(int),
 		.mode		= 0666,
 		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "record_whitelist",
+		.data		= g_record_whitelist,
+		.maxlen 	= sizeof(g_record_whitelist),
+		.mode		= 0666,
+		.proc_handler	= fwx_proc_record_whitelist_handler,
 	},
 	{
 		.procname	= "user_mode",

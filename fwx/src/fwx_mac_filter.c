@@ -58,7 +58,7 @@ mac_filter_rule_t *fwx_find_mac_filter_rule(int rule_id) {
 	return NULL;
 }
 
-int fwx_add_mac_filter_rule(int rule_id) {
+int fwx_add_mac_filter_rule(int rule_id, int mode) {
 	mac_filter_rule_t *rule;
 
 	if (g_mac_rule_count >= MAX_MAC_FILTER_RULE_NUM) {
@@ -76,6 +76,7 @@ int fwx_add_mac_filter_rule(int rule_id) {
 	}
 
 	rule->rule_id = rule_id;
+	rule->mode = (mode == MAC_FILTER_MODE_SINGLE_USER) ? MAC_FILTER_MODE_SINGLE_USER : MAC_FILTER_MODE_ALL_USERS;
 	fwx_mac_config_init(&rule->mac_list);
 	INIT_LIST_HEAD(&rule->list);
 
@@ -143,35 +144,18 @@ int fwx_del_mac_from_rule(int rule_id, const unsigned char *mac) {
 mac_filter_rule_t *fwx_match_mac_filter_rule(const unsigned char *mac) {
 	mac_filter_rule_t *rule;
 	struct mac_node *node;
-	int i;
-	int mac_list_empty;
 
 	mac_filter_read_lock();
 	list_for_each_entry(rule, &mac_filter_rule_list, list) {
-		node = fwx_find_mac_node(&rule->mac_list, mac);
-		
-		if (node) {
+		if (rule->mode == MAC_FILTER_MODE_ALL_USERS) {
 			mac_filter_read_unlock();
 			return rule;
 		}
-		
 
-		mac_list_empty = 1;
-		for (i = 0; i < MAC_HASH_SIZE; i++) {
-			if (!hlist_empty(&rule->mac_list.hash_table[i])) {
-				mac_list_empty = 0;
-				break;
-			}
-		}
-		
-		if (mac_list_empty) {
-
-			if (rule->rule_id == 101) {
-				continue;
-			} else {
-				mac_filter_read_unlock();
-				return rule;
-			}
+		node = fwx_find_mac_node(&rule->mac_list, mac);
+		if (node) {
+			mac_filter_read_unlock();
+			return rule;
 		}
 
 	}
@@ -180,21 +164,28 @@ mac_filter_rule_t *fwx_match_mac_filter_rule(const unsigned char *mac) {
 }
 
 int fwx_api_add_mac_filter_rule(cJSON *data_obj) {
-	int i;
 	cJSON *rule_id_obj;
-	cJSON *mac_array;
+	cJSON *mode_obj;
+	int mode = MAC_FILTER_MODE_ALL_USERS;
 	
 	if (!data_obj) {
 		return -1;
 	}
 	
 	rule_id_obj = cJSON_GetObjectItem(data_obj, "rule_id");
+	mode_obj = cJSON_GetObjectItem(data_obj, "mode");
+	if (mode_obj) {
+		mode = mode_obj->valueint;
+	}
+	if (mode != MAC_FILTER_MODE_SINGLE_USER) {
+		mode = MAC_FILTER_MODE_ALL_USERS;
+	}
 	if (!rule_id_obj) {
 		printk("invalid rule format\n");
 		return -1;
 	}
 	
-	if (fwx_add_mac_filter_rule(rule_id_obj->valueint) < 0) {
+	if (fwx_add_mac_filter_rule(rule_id_obj->valueint, mode) < 0) {
 		return -1;
 	}
 
@@ -205,15 +196,15 @@ int fwx_api_mod_mac_filter_rule(cJSON *data_obj) {
 	int i;
 	cJSON *rule_id_obj;
 	cJSON *mac_array;
-	int mac_type = 0;
 	cJSON *mac_obj;
 	cJSON *action_obj;
+	cJSON *mode_obj;
 	mac_filter_rule_t *rule = NULL;
 
 	if (!data_obj) {
 		return -1;
 	}
-
+	printk("mod mac filter rule\n");
 	rule_id_obj = cJSON_GetObjectItem(data_obj, "rule_id");
 
 	action_obj = cJSON_GetObjectItem(data_obj, "mac_action"); 
@@ -229,6 +220,21 @@ int fwx_api_mod_mac_filter_rule(cJSON *data_obj) {
 	if (!rule) {
 		printk("rule %d not found\n", rule_id_obj->valueint);
 		return -1;
+	}
+
+	mode_obj = cJSON_GetObjectItem(data_obj, "mode");
+	if (mode_obj) {
+		int mode = mode_obj->valueint;
+		if (mode != MAC_FILTER_MODE_SINGLE_USER) {
+			mode = MAC_FILTER_MODE_ALL_USERS;
+		}
+		mac_filter_write_lock();
+		rule->mode = mode;
+		mac_filter_write_unlock();
+	}
+	
+	if (action_obj) {
+		printk("action = %d\n", action_obj->valueint);
 	}
 
     if (action_obj){
@@ -315,9 +321,9 @@ int fwx_api_dump_mac_filter_rule(cJSON *data_obj) {
 	mac_filter_read_lock();
 
 	printk("\n");
-	printk("+--------+----------------------------------------+\n");
-	printk("| RuleID | MAC List                               |\n");
-	printk("+--------+----------------------------------------+\n");
+	printk("+--------+------+----------------------------------------+\n");
+	printk("| RuleID | Mode | MAC List                               |\n");
+	printk("+--------+------+----------------------------------------+\n");
 	
 	if (rule_id_obj) {
 		rule = fwx_find_mac_filter_rule(rule_id_obj->valueint);
@@ -330,11 +336,13 @@ int fwx_api_dump_mac_filter_rule(cJSON *data_obj) {
 			}
 			
 
-			printk(KERN_CONT "| %-6d| ", rule->rule_id);
+			printk(KERN_CONT "| %-6d | %-4d | ", rule->rule_id, rule->mode);
 			
 
-			if (mac_count == 0) {
-				printk(KERN_CONT "%-38s |\n", "(all MACs)");
+			if (rule->mode == MAC_FILTER_MODE_ALL_USERS) {
+				printk(KERN_CONT "%-38s |\n", "(all users)");
+			} else if (mac_count == 0) {
+				printk(KERN_CONT "%-38s |\n", "(empty)");
 			} else {
 				int total_mac_count = mac_count;
 				mac_count = 0;
@@ -368,11 +376,13 @@ int fwx_api_dump_mac_filter_rule(cJSON *data_obj) {
 			}
 			
 
-			printk(KERN_CONT "| %-6d | ", rule->rule_id);
+			printk(KERN_CONT "| %-6d | %-4d | ", rule->rule_id, rule->mode);
 			
 
-			if (mac_count == 0) {
-				printk(KERN_CONT "%-38s |\n", "(all MACs)");
+			if (rule->mode == MAC_FILTER_MODE_ALL_USERS) {
+				printk(KERN_CONT "%-38s |\n", "(all users)");
+			} else if (mac_count == 0) {
+				printk(KERN_CONT "%-38s |\n", "(empty)");
 			} else {
 				int total_mac_count = mac_count;
 				mac_count = 0;
@@ -396,7 +406,7 @@ int fwx_api_dump_mac_filter_rule(cJSON *data_obj) {
 		}
 	}
 	
-	printk("+--------+-------+----------------------------------------+\n");
+	printk("+--------+------+----------------------------------------+\n");
 	
 
 	printk("\n");

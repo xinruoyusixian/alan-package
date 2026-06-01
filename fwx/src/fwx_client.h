@@ -5,6 +5,7 @@
 #ifndef __AF_CLIENT_H__
 #define __AF_CLIENT_H__
 #include "fwx.h"
+struct cJSON;
 
 extern rwlock_t af_client_lock;
 
@@ -92,6 +93,7 @@ typedef struct af_client_info
 	int active_time;
 	int inactive_time;
 	int active;
+	int record_whitelist;
 	visiting_info_t visiting;
 	int report_count;
 	unsigned int timer_count;  
@@ -118,5 +120,11 @@ af_client_info_t *find_and_add_af_client(unsigned char *mac);
 app_visit_info_t *get_or_create_visit_info(af_client_info_t *node, unsigned int app_id);
 int af_update_client_app_info(af_client_info_t *node, int app_id, int drop, int from_conntrack, int is_http);
 void check_expired_visit_info(af_client_info_t *node);
+
+int fwx_match_record_whitelist(const unsigned char *mac);
+int fwx_set_record_whitelist(const char *mac_list_str);
+int fwx_api_add_record_whitelist(struct cJSON *data_obj);
+int fwx_api_del_record_whitelist(struct cJSON *data_obj);
+int fwx_api_flush_record_whitelist(struct cJSON *data_obj);
 
 #endif

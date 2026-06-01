@@ -6,6 +6,7 @@ function index()
 	
 	entry({"admin", "dashboard_api", "get_dashboard_common"}, call("get_dashboard_common")).leaf = true
 	entry({"admin", "dashboard_api", "get_init_status"}, call("get_init_status")).leaf = true
+	entry({"admin", "dashboard_api", "set_init_status"}, call("set_init_status")).leaf = true
 	entry({"admin", "dashboard_api", "get_daily_top_users"}, call("get_daily_top_users")).leaf = true
 	entry({"admin", "dashboard_api", "get_active_users"}, call("get_active_users")).leaf = true
 	entry({"admin", "dashboard_api", "get_app_type_stats"}, call("get_app_type_stats")).leaf = true
@@ -48,6 +49,22 @@ function get_init_status()
 		luci.http.write_json(resp_obj.data)
 	else
 		luci.http.write_json({init_status = 1})
+	end
+end
+
+function set_init_status()
+	local utl = require "luci.util"
+	luci.http.prepare_content("application/json")
+
+	local req_obj = {}
+	req_obj.api = "set_init_status"
+	req_obj.data = { init_status = 1 }
+
+	local resp_obj = utl.ubus("fwx", "common", req_obj)
+	if resp_obj and resp_obj.code == 2000 and resp_obj.data then
+		luci.http.write_json(resp_obj.data)
+	else
+		luci.http.write_json({init_status = 0})
 	end
 end
 

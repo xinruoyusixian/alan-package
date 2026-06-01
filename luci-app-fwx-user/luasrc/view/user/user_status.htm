@@ -568,18 +568,18 @@
 							pcStatusHtml = '<a href="javascript:void(0);" class="pc-status-link" onclick="showParentalControlDetail(\'' + user_list[i].mac + '\')">' + escapeHtml(pcStatus) + '</a>';
 						}
 						$tr.append('<td class="td">' + pcStatusHtml + '</td>');
-						var statusHtml = "<%:Offline%>";
+						var statusHtml = '<span class="user-status-label offline"><%:Offline%></span>';
 						if (user_list[i].online == 1) {
 							if (user_list[i].active == 1) {
-								statusHtml = '<span style="color: #22c55e;"><%:Active%></span>';
-						} else {
-							statusHtml = '<span style="color: #3b82f6;"><%:Online%></span>';
+								statusHtml = '<span class="user-status-label active"><%:Active%></span>';
+							} else {
+								statusHtml = '<span class="user-status-label online"><%:Online%></span>';
+							}
 						}
-					}
 					$tr.append('<td class="td">' + statusHtml + '</td>');
 					var inBlacklist = parseInt(user_list[i].in_blacklist, 10) === 1;
 					var blacklistText = inBlacklist ? '<%:Unblock%>' : '<%:Block%>';
-					var blacklistClass = inBlacklist ? 'cbi-button cbi-button-remove' : 'cbi-button cbi-button-add';
+					var blacklistClass = inBlacklist ? 'cbi-button cbi-button-add user-unblock-btn' : 'cbi-button cbi-button-remove user-block-btn';
 					$tr.append(`
 						<td class="td">
 							<button type="button" class="cbi-button cbi-button-add" onclick="window.location.href='<%=url("admin/fwx_user/detail")%>?mac=' + encodeURIComponent('${user_list[i].mac}')" style="margin-right: 5px;"><%:Detail%></button>
@@ -1373,7 +1373,7 @@
 
 	.user-card-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: 14px;
 		margin-top: 6px;
 	}
@@ -1427,18 +1427,36 @@
 	}
 
 	.user-card-status.online {
-		color: #1d4ed8;
-		background: rgba(59, 130, 246, 0.16);
+		color: #22c55e;
+		background: rgba(34, 197, 94, 0.18);
 	}
 
 	.user-card-status.active {
-		color: #15803d;
-		background: rgba(34, 197, 94, 0.18);
+		color: var(--primary-color-high, #1976d2);
+		background: rgba(25, 118, 210, 0.16);
 	}
 
 	.user-card-status.offline {
 		color: #6b7280;
 		background: rgba(148, 163, 184, 0.22);
+	}
+
+	.user-status-label {
+		font-size: 12px;
+		font-weight: 600;
+		line-height: 1.4;
+	}
+
+	.user-status-label.online {
+		color: #22c55e;
+	}
+
+	.user-status-label.active {
+		color: var(--primary-color-high, #1976d2);
+	}
+
+	.user-status-label.offline {
+		color: #6b7280;
 	}
 
 	.user-card-body {
@@ -1500,6 +1518,18 @@
 		margin-top: 2px;
 	}
 
+	.user-block-btn {
+		background: #ef4444 !important;
+		border-color: #dc2626 !important;
+		color: #fff !important;
+	}
+
+	.user-block-btn:hover {
+		background: #dc2626 !important;
+		border-color: #b91c1c !important;
+		color: #fff !important;
+	}
+
 	@media (max-width: 768px) {
 		.user-view-toolbar {
 			justify-content: flex-start;
@@ -1546,7 +1576,30 @@
 		}
 
 		.user-card-grid {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.user-card {
+			width: 100%;
+			box-sizing: border-box;
+			padding: 12px;
+		}
+
+		.user-card-url {
+			max-width: 100%;
+		}
+	}
+
+	@media (max-width: 480px) {
+		.user-card-line {
+			flex-wrap: wrap;
+			gap: 6px;
+		}
+
+		.user-card-label,
+		.user-card-value {
+			width: 100%;
+			text-align: left;
 		}
 	}
 

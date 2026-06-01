@@ -23,6 +23,7 @@
 #include "fwx.h"
 #include "fwx_mac_filter.h"
 #include "fwx_app_filter.h"
+#include "fwx_client.h"
 static struct mutex fwx_cdev_mutex;
 struct fwx_config_dev
 {
@@ -54,6 +55,9 @@ k_request_item_t k_request_api_list[]={
 	{"flush_mac_filter_whitelist", fwx_api_flush_mac_filter_whitelist},
 	{"add_app_filter_whitelist", fwx_api_add_app_filter_whitelist},
 	{"flush_app_filter_whitelist", fwx_api_flush_app_filter_whitelist},
+	{"add_record_whitelist", fwx_api_add_record_whitelist},
+	{"del_record_whitelist", fwx_api_del_record_whitelist},
+	{"flush_record_whitelist", fwx_api_flush_record_whitelist},
 };
 
 int fwx_config_handle(char *config, unsigned int len)
