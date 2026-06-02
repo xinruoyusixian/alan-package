@@ -246,7 +246,7 @@ msgid "Expanded"
 msgstr "扩容版"
 
 msgid "Quick Guide"
-msgstr "Quick Guide"
+msgstr "设置向导"
 
 msgid "Got it"
-msgstr "Got it"
+msgstr "知道了"

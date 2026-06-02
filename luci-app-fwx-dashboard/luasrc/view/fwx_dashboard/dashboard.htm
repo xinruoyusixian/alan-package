@@ -783,11 +783,36 @@
         cursor: pointer;
     }
     .app-icon {
+        width: 100%;
+        height: 100%;
+        border-radius: inherit;
+        object-fit: cover;
+        display: block;
+        opacity: 0;
+    }
+    .app-icon-wrap {
         width: 36px;
         height: 36px;
         border-radius: 8px;
-        object-fit: cover;
         margin-bottom: 6px;
+        background-image: url('<%=resource%>/app_icons/default.png');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        overflow: hidden;
+        display: inline-block;
+        vertical-align: middle;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        box-sizing: border-box;
+    }
+    [data-darkmode="true"] .app-icon-wrap {
+        border-color: rgba(148, 163, 184, 0.35);
+    }
+    .app-icon.is-loaded {
+        opacity: 1;
+    }
+    [data-darkmode="true"] .app-icon {
+        filter: none;
     }
     .app-name {
         font-size: 12px;
@@ -2920,10 +2945,17 @@
         var displayList = appList.slice(0, 10);
         displayList.forEach(function(app){
             var $appItem = $('<div>').addClass('app-item');
-            var $icon = $('<img>').addClass('app-icon')
-                .attr('src', '<%=resource%>/app_icons/' + app.id + '.png')
-                .attr('alt', app.name || 'app')
-                .on('error', function(){ $(this).attr('src', '<%=resource%>/app_icons/default.png'); });
+            var $iconWrap = $('<span>').addClass('app-icon-wrap')
+                .attr('title', app.name || 'app');
+            var appId = (app && app.id !== undefined && app.id !== null) ? String(app.id).trim() : '';
+            if (appId) {
+                var $icon = $('<img>').addClass('app-icon')
+                    .attr('src', '<%=resource%>/app_icons/' + encodeURIComponent(appId) + '.png')
+                    .attr('alt', app.name || 'app')
+                    .on('load', function(){ $(this).addClass('is-loaded'); })
+                    .on('error', function(){ $(this).remove(); });
+                $iconWrap.append($icon);
+            }
             var $nameSpan = $('<div>').addClass('app-name').text(app.name || ('app' + app.id));
             var $tooltip = $('<div>').addClass('tooltip tooltip-top tooltip-arrow-center tooltip-center-x');
             
@@ -2938,7 +2970,7 @@
             if(app.dst_port) tooltipHtml += '<div class="tooltip-row"><span class="tooltip-label">' + _DestinationPort + ':</span><span class="tooltip-value">'+app.dst_port+'</span></div>';
             if(app.domain) tooltipHtml += '<div class="tooltip-row"><span class="tooltip-label">' + _MatchedDomain + ':</span><span class="tooltip-value">'+app.domain+'</span></div>';
             $tooltip.html(tooltipHtml);
-            $appItem.append($icon).append($nameSpan).append($tooltip);
+            $appItem.append($iconWrap).append($nameSpan).append($tooltip);
             $container.append($appItem);
         });
     }

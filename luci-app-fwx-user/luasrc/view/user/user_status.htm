@@ -337,6 +337,20 @@
 					.replace(/'/g, '&#39;');
 			}
 
+			function buildAppIconHtml(app, styleText) {
+				var appName = escapeHtml(app && app.name ? app.name : '');
+				var appId = app && app.id !== undefined && app.id !== null ? String(app.id).trim() : '';
+				var iconSrc = appId ? ('<%=resource%>/app_icons/' + encodeURIComponent(appId) + '.png') : '';
+				var style = styleText || 'width: 20px; height: 20px; border-radius: 5px; margin-right: 8px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 1px 3px rgba(0,0,0,0.3); object-fit: cover;';
+				var wrapperStart = '<span title="' + appName + '" style="' + style + 'display:inline-block;overflow:hidden;vertical-align:middle;background-image:url(<%=resource%>/app_icons/default.png);background-size:cover;background-position:center;background-repeat:no-repeat;">';
+				if (!iconSrc) {
+					return wrapperStart + '</span>';
+				}
+				return wrapperStart +
+					'<img src="' + iconSrc + '" alt="' + appName + '" style="width:100%;height:100%;display:block;object-fit:cover;opacity:0;" onload="this.style.opacity=1;" onerror="this.remove();">' +
+					'</span>';
+			}
+
 			function formatWeekdayList(weekdays) {
 				const dayMap = ['<%:Sun%>', '<%:Mon%>', '<%:Tue%>', '<%:Wed%>', '<%:Thu%>', '<%:Fri%>', '<%:Sat%>'];
 				if (!Array.isArray(weekdays) || weekdays.length === 0) {
@@ -542,7 +556,7 @@
 				     if (!Array.isArray(user_list[i].applist))
                          user_list[i].applist = []
 					var app_list_str = user_list[i].applist.map(app => {
-						return `<img src="<%=resource%>/app_icons/${app.id}.png" alt="${app.name}" title="${app.name}" style="width: 20px; height: 20px; border-radius: 5px; margin-right: 8px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 1px 3px rgba(0,0,0,0.3); object-fit: cover;">`;
+						return buildAppIconHtml(app, 'width: 20px; height: 20px; border-radius: 5px; margin-right: 8px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 1px 3px rgba(0,0,0,0.3); object-fit: cover;');
 					}).join("") || "--";
 					$tr.append('<td class="td">' + app_list_str + '</td>');
 					var isOnline = parseInt(user_list[i].online, 10) === 1;
