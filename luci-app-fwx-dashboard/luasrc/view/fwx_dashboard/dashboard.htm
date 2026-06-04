@@ -788,17 +788,13 @@
         border-radius: inherit;
         object-fit: cover;
         display: block;
-        opacity: 0;
+        opacity: 1;
     }
     .app-icon-wrap {
         width: 36px;
         height: 36px;
         border-radius: 8px;
         margin-bottom: 6px;
-        background-image: url('<%=resource%>/app_icons/default.png');
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
         overflow: hidden;
         display: inline-block;
         vertical-align: middle;
@@ -807,9 +803,6 @@
     }
     [data-darkmode="true"] .app-icon-wrap {
         border-color: rgba(148, 163, 184, 0.35);
-    }
-    .app-icon.is-loaded {
-        opacity: 1;
     }
     [data-darkmode="true"] .app-icon {
         filter: none;
@@ -2948,14 +2941,22 @@
             var $iconWrap = $('<span>').addClass('app-icon-wrap')
                 .attr('title', app.name || 'app');
             var appId = (app && app.id !== undefined && app.id !== null) ? String(app.id).trim() : '';
+            var defaultIcon = '<%=resource%>/app_icons/default.png';
+            var $icon = $('<img>').addClass('app-icon')
+                .attr('src', defaultIcon)
+                .attr('alt', app.name || 'app');
             if (appId) {
-                var $icon = $('<img>').addClass('app-icon')
-                    .attr('src', '<%=resource%>/app_icons/' + encodeURIComponent(appId) + '.png')
-                    .attr('alt', app.name || 'app')
-                    .on('load', function(){ $(this).addClass('is-loaded'); })
-                    .on('error', function(){ $(this).remove(); });
-                $iconWrap.append($icon);
+                var iconSrc = '<%=resource%>/app_icons/' + encodeURIComponent(appId) + '.png';
+                var iconLoader = new Image();
+                iconLoader.onload = function(){
+                    $icon.attr('src', iconSrc);
+                };
+                iconLoader.onerror = function(){
+                    $icon.attr('src', defaultIcon);
+                };
+                iconLoader.src = iconSrc;
             }
+            $iconWrap.append($icon);
             var $nameSpan = $('<div>').addClass('app-name').text(app.name || ('app' + app.id));
             var $tooltip = $('<div>').addClass('tooltip tooltip-top tooltip-arrow-center tooltip-center-x');
             
