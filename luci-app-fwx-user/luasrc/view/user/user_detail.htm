@@ -1,5 +1,6 @@
 <link rel="stylesheet" href="<%=resource%>/css/common.css">
 <% local dsp=require "luci.dispatcher" -%>
+<script type="text/javascript" src="<%=resource%>/jquery-3.7.1.min.js"></script>
 <script type="text/javascript" src="<%=resource%>/echarts.min.js?v=5.0"></script>
 
 <script type="text/javascript">//<![CDATA[
@@ -714,10 +715,21 @@
 
 	function render_visit_list_table(data) {
 		var tb = document.getElementById('visit_list_table');
-		var visit_list = data.list;
-		if (visit_list && tb) {
-			while (tb.rows.length > 1)
+		var visit_list = (data && Array.isArray(data.list)) ? data.list : [];
+		if (tb) {
+			while (tb.rows.length > 1) {
 				tb.deleteRow(1);
+			}
+			if (visit_list.length === 0) {
+				var emptyTr = tb.insertRow(-1);
+				emptyTr.className = 'tr';
+				var emptyTd = emptyTr.insertCell(-1);
+				emptyTd.className = 'td';
+				emptyTd.colSpan = 6;
+				emptyTd.style.textAlign = 'center';
+				emptyTd.innerHTML = '<%:No records%>';
+				return;
+			}
 			for (var i = 0; i < visit_list.length; i++) {
 				var action_status = visit_list[i].act == 1
 					? '<span style="color:#F44336;"><%:Filtered%></span>'
@@ -1486,7 +1498,7 @@
 		});
 	}
 
-	function showTabContent(tabId) {
+	function showTabContent(tabId, tabEl) {
 		var tabs = document.querySelectorAll('.tab-body');
 		tabs.forEach(function(tab) {
 			tab.classList.remove('active');
@@ -1500,7 +1512,12 @@
 		tabItems.forEach(function(item) {
 			item.classList.remove('active');
 		});
-		event.target.classList.add('active');
+		if (!tabEl && window.event && window.event.target) {
+			tabEl = window.event.target;
+		}
+		if (tabEl) {
+			tabEl.classList.add('active');
+		}
 
 		if (tabId === 'tab-user-info') {
 			stopVisitAutoRefresh();
@@ -1573,13 +1590,13 @@
 			<h4 style="margin: 0 0 20px 0; color: inherit;"><%:User Detail%>(<span id="device-title-mac">--</span>)</h4>
 			
 			<ul class="tab-list">
-				<li class="tab-item active" onclick="showTabContent('tab-user-info')"><%:Basic Info%></li>
-				<li class="tab-item" onclick="showTabContent('tab-behavior-rules')"><%:Parental Control Rules%></li>
-				<li class="tab-item" onclick="showTabContent('tab-app-duration')"><%:App Statistics%></li>
-				<li class="tab-item" onclick="showTabContent('tab-traffic-statistics')"><%:Today Traffic%></li>
-				<li class="tab-item" onclick="showTabContent('tab-app-ranking')"><%:Today Top Apps%></li>
-				<li class="tab-item" onclick="showTabContent('tab-online-offline-records')" style="display:none"><%:Online/Offline Records%></li>
-				<li class="tab-item" onclick="showTabContent('tab-visit-records')"><%:Visit Records%></li>
+				<li class="tab-item active" onclick="showTabContent('tab-user-info', this)"><%:Basic Info%></li>
+				<li class="tab-item" onclick="showTabContent('tab-behavior-rules', this)"><%:Parental Control Rules%></li>
+				<li class="tab-item" onclick="showTabContent('tab-app-duration', this)"><%:App Statistics%></li>
+				<li class="tab-item" onclick="showTabContent('tab-traffic-statistics', this)"><%:Today Traffic%></li>
+				<li class="tab-item" onclick="showTabContent('tab-app-ranking', this)"><%:Today Top Apps%></li>
+				<li class="tab-item" onclick="showTabContent('tab-online-offline-records', this)" style="display:none"><%:Online/Offline Records%></li>
+				<li class="tab-item" onclick="showTabContent('tab-visit-records', this)"><%:Visit Records%></li>
 			</ul>
 
 			<div id="tab-user-info" class="tab-body active">
