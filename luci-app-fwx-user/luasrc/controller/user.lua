@@ -250,6 +250,8 @@ function get_parental_control_detail()
 		luci.http.write_json({
 			pc_status = "unlimited",
 			pc_status_key = "unlimited",
+			af_whitelist = 0,
+			mf_whitelist = 0,
 			appfilter_rules = {},
 			macfilter_rules = {}
 		})
@@ -263,6 +265,8 @@ function get_user_parental_control_rules()
 	if target_mac == "" then
 		luci.http.write_json({
 			mac = "",
+			af_whitelist = 0,
+			mf_whitelist = 0,
 			list = {}
 		})
 		return
@@ -281,6 +285,8 @@ function get_user_parental_control_rules()
 	else
 		luci.http.write_json({
 			mac = target_mac,
+			af_whitelist = 0,
+			mf_whitelist = 0,
 			list = {}
 		})
 	end

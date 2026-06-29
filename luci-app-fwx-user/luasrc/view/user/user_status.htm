@@ -5,6 +5,7 @@
 <script type="text/javascript" src="<%=resource%>/echarts.min.js?v=5.0"></script>
 
 	<script type="text/javascript">//<![CDATA[
+		const FWX_ECHART_RENDERER = 'svg';
 		let visit_time_data = []; // Use mock data for chart display
 		let user_list_data = {
 			total_num: 0,
@@ -59,7 +60,7 @@
 			var $cardWrap = $('#user_status_cards');
 			if ($tableWrap.length === 0 || $cardWrap.length === 0) return;
 			$tableWrap.css('display', view_mode === 'card' ? 'none' : 'block');
-			$cardWrap.css('display', view_mode === 'card' ? 'grid' : 'none');
+			$cardWrap.css('display', view_mode === 'card' ? 'flex' : 'none');
 			update_view_mode_buttons();
 		}
 
@@ -75,6 +76,20 @@
 				var mode = $(this).data('mode');
 				switch_view_mode(mode);
 			});
+		}
+
+		function get_card_row_layout($cards) {
+			var cardWidth = 400;
+			var cardGap = 14;
+			var maxColumns = 5;
+			var availableWidth = $cards.parent().width() || $cards.width() || document.documentElement.clientWidth || cardWidth;
+			var columns = Math.floor((availableWidth + cardGap) / (cardWidth + cardGap));
+			columns = Math.max(1, Math.min(maxColumns, columns));
+			var rowWidth = columns * cardWidth + (columns - 1) * cardGap;
+			return {
+				columns: columns,
+				rowWidth: rowWidth
+			};
 		}
 
 		function applyCapabilityColumnVisibility() {
@@ -344,6 +359,19 @@
 				return 'unlimited';
 			}
 
+			function applyWhitelistPcStatus(statusKey, item) {
+				var normalized = normalizePcStatusKey(statusKey);
+				var afWhitelist = item && parseInt(item.af_whitelist, 10) === 1;
+				var mfWhitelist = item && parseInt(item.mf_whitelist, 10) === 1;
+				if (afWhitelist && normalized === 'app_limited') {
+					return 'unlimited';
+				}
+				if (mfWhitelist && normalized === 'mac_blocked') {
+					return 'unlimited';
+				}
+				return normalized;
+			}
+
 			function formatPcStatus(statusKey) {
 				var statusTextMap = {
 					unlimited: '<%:Unrestricted%>',
@@ -362,24 +390,35 @@
 				return _ICON_COLORS[Math.abs(h) % _ICON_COLORS.length];
 			}
 
-			function buildAppIconEl(app) {
+			function buildDeviceIconHtml(name, mac) {
+				var displayName = (name || mac || '?').trim();
+				if (!displayName || displayName === '--') {
+					displayName = (mac || '?').trim();
+				}
+				var firstChar = displayName.charAt(0).toUpperCase();
+				return '<span class="user-device-icon" style="background:' + appLetterColor(displayName) + ';">' +
+					escapeHtml(firstChar || '?') + '</span>';
+			}
+
+			function buildAppIconEl(app, isCurrent) {
 				var appName = app && app.name ? app.name : '';
 				var appId = app && app.id !== undefined && app.id !== null ? String(app.id).trim() : '';
 				var iconSrc = appId ? '<%=resource%>/app_icons/' + encodeURIComponent(appId) + '.png' : '';
 				if (appId && _iconStatusCache[appId] === 'loaded') {
-					return $('<span>').addClass('user-app-icon-wrap').attr('title', appName).css({
-						width:'20px', height:'20px', borderRadius:'5px', marginRight:'8px',
-						display:'inline-block', flexShrink:0, verticalAlign:'middle'
+					return $('<span>').addClass('user-app-icon-wrap').toggleClass('user-app-icon-current', !!isCurrent).attr('title', appName).css({
+						width:'20px', height:'20px', borderRadius:'5px', marginRight:'4px',
+						display:'inline-block', flexShrink:0, verticalAlign:'middle', overflow:'hidden', position:'relative'
 					}).append($('<img>').addClass('user-app-icon-img').attr({src:iconSrc, alt:appName})
-						.css({width:'100%', height:'100%', display:'block', objectFit:'cover'}));
+						.css({width:'100%', height:'100%', borderRadius:'5px', display:'block', objectFit:'cover'}));
 				}
-				var $wrap = $('<span>').addClass('user-app-icon-wrap').attr('title', appName).css({
-					width:'20px', height:'20px', borderRadius:'5px', marginRight:'8px',
+				var $wrap = $('<span>').addClass('user-app-icon-wrap').toggleClass('user-app-icon-current', !!isCurrent).attr('title', appName).css({
+					width:'20px', height:'20px', borderRadius:'5px', marginRight:'4px',
 					display:'inline-flex', alignItems:'center', justifyContent:'center',
 					background: appLetterColor(appName), color:'#fff',
 					fontSize:'11px', fontWeight:'700', flexShrink:0,
 					border:'1px solid rgba(255,255,255,0.1)',
-					boxShadow:'0 1px 3px rgba(0,0,0,0.3)', verticalAlign:'middle'
+					boxShadow:'0 1px 3px rgba(0,0,0,0.3)', verticalAlign:'middle', position:'relative',
+					overflow:'hidden'
 				}).text((appName || '?').charAt(0).toUpperCase());
 				if (appId && _iconStatusCache[appId] !== 'failed') {
 					var loader = new Image();
@@ -391,13 +430,40 @@
 								border:'', boxShadow:'',
 								display:'inline-block', alignItems:'', justifyContent:''
 							}).append($('<img>').addClass('user-app-icon-img').attr({src:src, alt:alt})
-								.css({width:'100%', height:'100%', display:'block', objectFit:'cover'}));
+								.css({width:'100%', height:'100%', borderRadius:'5px', display:'block', objectFit:'cover'}));
 						};
 					})($wrap, iconSrc, appName, appId);
 					loader.onerror = (function(id) { return function() { _iconStatusCache[id] = 'failed'; }; })(appId);
 					loader.src = iconSrc;
 				}
 				return $wrap;
+			}
+
+			function buildDisplayAppList(applist, currentAppId, currentAppName) {
+				var result = [];
+				var used = {};
+				var normalizedName = (currentAppName || '').trim();
+				var currentId = currentAppId !== undefined && currentAppId !== null ? String(currentAppId).trim() : '';
+				if ((!normalizedName || normalizedName === '--') && currentId && currentId !== '0') {
+					normalizedName = 'App ' + currentId;
+				}
+				if (normalizedName && normalizedName !== '--') {
+					var currentKey = currentId && currentId !== '0' ? ('id:' + currentId) : ('name:' + normalizedName);
+					used[currentKey] = true;
+					result.push({ id: currentId, name: normalizedName, current: true });
+				}
+				var commonCount = 0;
+				(applist || []).forEach(function(app) {
+					if (commonCount >= 5 || result.length >= 6 || !app) return;
+					var appId = app.id !== undefined && app.id !== null ? String(app.id).trim() : '';
+					var appName = app.name || '';
+					var key = appId && appId !== '0' ? ('id:' + appId) : ('name:' + appName);
+					if (used[key]) return;
+					used[key] = true;
+					result.push({ id: appId, name: appName, current: false });
+					commonCount++;
+				});
+				return result;
 			}
 
 			function formatWeekdayList(weekdays) {
@@ -495,9 +561,9 @@
 			}
 
             function pickOneMatchedRule(detail) {
-                var statusKey = detail.pc_status_key || '';
-                var appRules = Array.isArray(detail.appfilter_rules) ? detail.appfilter_rules : [];
-                var macRules = Array.isArray(detail.macfilter_rules) ? detail.macfilter_rules : [];
+                var statusKey = applyWhitelistPcStatus(detail.pc_status_key || detail.pc_status, detail);
+                var appRules = (detail && parseInt(detail.af_whitelist, 10) === 1) ? [] : (Array.isArray(detail.appfilter_rules) ? detail.appfilter_rules : []);
+                var macRules = (detail && parseInt(detail.mf_whitelist, 10) === 1) ? [] : (Array.isArray(detail.macfilter_rules) ? detail.macfilter_rules : []);
                 var sortByRuleId = function(a, b) {
                     var aId = parseInt(a && a.rule_id, 10) || 0;
                     var bId = parseInt(b && b.rule_id, 10) || 0;
@@ -532,7 +598,7 @@
 					var detail = data || {};
 					loadAppClassNameMap(function() {
 						var matched = pickOneMatchedRule(detail);
-						var statusKey = normalizePcStatusKey(detail.pc_status_key || detail.pc_status);
+						var statusKey = applyWhitelistPcStatus(detail.pc_status_key || detail.pc_status, detail);
 						$('#pcDetailMac').text(mac || '--');
 						$('#pcDetailStatus').text(formatPcStatus(statusKey));
 						$('#pcRuleDetailBody').html(buildRuleRows(matched.type, matched.rule));
@@ -548,6 +614,9 @@
 			if (user_list && $tb.length && $cards.length) {
 				$tb.find('tr:gt(0)').remove();
 				$cards.empty();
+				var cardLayout = get_card_row_layout($cards);
+				var cardIndex = 0;
+				var $cardRow = null;
 				for (var i = 0; i < user_list.length; i++) {
 					var nickname = (user_list[i].nickname || "").trim();
 					var hostname = (user_list[i].hostname || "").trim();
@@ -556,26 +625,19 @@
 					var list_full_name = list_display_name;
 					var list_truncated_name = truncateDeviceName(list_display_name, 16);
 					var card_title = nickname || hostname || mac || "--";
-					var card_full_name = card_title;
-					var card_truncated_name = truncateDeviceName(card_title, 24);
-					var identityLine = mac;
-					if (nickname && hostname) {
-						identityLine = nickname + ' / ' + hostname + ' · ' + mac;
-					} else if (nickname) {
-						identityLine = nickname + ' · ' + mac;
-					} else if (hostname) {
-						identityLine = hostname + ' · ' + mac;
-					}
+					var card_identity_name = nickname || hostname || "";
+					var card_info_line = card_identity_name ? (card_identity_name + ' (' + mac + ')') : mac;
 
 					const $tr = $('<tr class="tr"></tr>');
 					if (user_list[i].online != 1) {
 						$tr.css('color', '#A9A9A9');
 					}
 					$tr.append(`<td class="td">
-						<div style="display: flex; align-items: center;">
-							<div>
-								<div title="${list_full_name}">${list_truncated_name}</div>
-								<div>${mac}</div>
+						<div class="user-device-info">
+							${buildDeviceIconHtml(list_display_name, mac)}
+							<div class="user-device-text">
+								<div class="user-device-name" title="${escapeHtml(list_full_name)}">${escapeHtml(list_truncated_name)}</div>
+								<div class="user-device-mac" title="${escapeHtml(mac)}">${escapeHtml(mac)}</div>
 							</div>
 						</div>
 					</td>`);
@@ -603,24 +665,27 @@
 					var totalTrafficStr = formatTraffic(totalTraffic);
 					var cellId = 'traffic-cell-' + i;
 					$tr.append('<td class="td"><span id="' + cellId + '" style="position: relative;" onmouseenter="showTrafficTooltip(event, \'' + upTrafficStr + '\', \'' + downTrafficStr + '\')" onmouseleave="hideTrafficTooltip(event)">' + totalTrafficStr + '</span></td>');
+					var todayActiveTimeStr = get_display_time(user_list[i].today_active_time || 0);
+					$tr.append('<td class="td">' + todayActiveTimeStr + '</td>');
 					var $appsTd = $('<td class="td">');
 					var applist = Array.isArray(user_list[i].applist) ? user_list[i].applist : [];
-					if (applist.length === 0) {
-						$appsTd.text('--');
-					} else {
-						applist.forEach(function(app) { $appsTd.append(buildAppIconEl(app)); });
-					}
-					$tr.append($appsTd);
 					var isOnline = parseInt(user_list[i].online, 10) === 1;
 					var current_app = isOnline ? (user_list[i].app || "--") : "--";
-					$tr.append('<td class="td">' + current_app + '</td>');
+					var current_app_id = isOnline ? (user_list[i].app_id || 0) : 0;
+					var displayApplist = buildDisplayAppList(applist, current_app_id, current_app);
+					if (displayApplist.length === 0) {
+						$appsTd.text('--');
+					} else {
+						displayApplist.forEach(function(app) { $appsTd.append(buildAppIconEl(app, app.current)); });
+					}
+					$tr.append($appsTd);
 						var current_url = isOnline ? (user_list[i].url || "--") : "--";
 						var display_url = current_url;
 						if (current_url !== "--" && current_url.length > 20) {
 							display_url = current_url.substring(0, 20) + "...";
 						}
 						$tr.append(`<td class="td"><span title="${current_url}">${display_url}</span></td>`);
-						var pcStatusKey = normalizePcStatusKey(user_list[i].pc_status_key || user_list[i].pc_status);
+						var pcStatusKey = applyWhitelistPcStatus(user_list[i].pc_status_key || user_list[i].pc_status, user_list[i]);
 						var pcStatus = formatPcStatus(pcStatusKey);
 						var pcStatusHtml = '<span>' + escapeHtml(pcStatus) + '</span>';
 						if (pcStatusKey === "unlimited") {
@@ -658,7 +723,6 @@
 						}
 					}
 					var ipText = user_list[i].ip || '--';
-					var currentAppText = current_app || '--';
 					var currentUrlText = current_url || '--';
 					var sessionInfo = '';
 					if (user_session_enable) {
@@ -673,21 +737,22 @@
 					var $card = $(`
 						<div class="user-card">
 							<div class="user-card-head">
-								<div class="user-card-title-wrap">
-									<div class="user-card-title" title="${escapeHtml(card_full_name)}">${escapeHtml(card_truncated_name)}</div>
-									<div class="user-card-subtitle" title="${escapeHtml(identityLine)}">${escapeHtml(identityLine)}</div>
+								<div class="user-card-device">
+									${buildDeviceIconHtml(card_title, mac)}
+									<div class="user-card-title-wrap">
+										<div class="user-card-title" title="${escapeHtml(card_info_line)}">${escapeHtml(card_info_line)}</div>
+										<div class="user-card-ip" title="${escapeHtml(ipText)}">${escapeHtml(ipText)}</div>
+									</div>
 								</div>
 								${onlineBadge}
 							</div>
 							<div class="user-card-body">
-								<div class="user-card-line"><span class="user-card-label"><%:IP Address%></span><span class="user-card-value">${escapeHtml(ipText)}</span></div>
-								<div class="user-card-line"><span class="user-card-label"><%:Today Traffic%></span><span class="user-card-value">${totalTrafficStr}</span></div>
-								<div class="user-card-line"><span class="user-card-label"><%:Upstream Rate%></span><span class="user-card-value user-card-up">${upRate}</span></div>
-								<div class="user-card-line"><span class="user-card-label"><%:Downstream Rate%></span><span class="user-card-value user-card-down">${downRate}</span></div>
+								<div class="user-card-line"><span class="user-card-label" title="&#20170;&#26085;&#19978;&#32593;&#27969;&#37327;">&#19978;&#32593;&#27969;&#37327;</span><span class="user-card-value">${totalTrafficStr}</span></div>
+								<div class="user-card-line"><span class="user-card-label" title="&#20170;&#26085;&#19978;&#32593;&#26102;&#38271;">&#19978;&#32593;&#26102;&#38271;</span><span class="user-card-value">${todayActiveTimeStr}</span></div>
+								<div class="user-card-line"><span class="user-card-label"><%:Rate%></span><span class="user-card-value user-card-rate"><span class="user-card-up">&uarr; ${upRate}</span><span class="user-card-down">&darr; ${downRate}</span></span></div>
 								${sessionInfo}
 								${rssiInfo}
-								<div class="user-card-line user-card-apps"><span class="user-card-label"><%:Common App(TOP5)%></span><span class="user-card-value user-card-apps-icons"></span></div>
-								<div class="user-card-line"><span class="user-card-label"><%:Active Apps%></span><span class="user-card-value">${escapeHtml(currentAppText)}</span></div>
+								<div class="user-card-line user-card-apps"><span class="user-card-label"><%:Common App%></span><span class="user-card-value user-card-apps-icons"></span></div>
 								<div class="user-card-line"><span class="user-card-label"><%:Visiting URL%></span><span class="user-card-value user-card-url" title="${escapeHtml(currentUrlText)}">${escapeHtml(currentUrlText)}</span></div>
 								<div class="user-card-line"><span class="user-card-label"><%:Internet Permission%></span><span class="user-card-value">${pcStatusHtml}</span></div>
 							</div>
@@ -697,12 +762,17 @@
 							</div>
 						</div>
 					`);
-					$cards.append($card);
+					if (cardIndex % cardLayout.columns === 0) {
+						$cardRow = $('<div class="user-card-row"></div>').css('max-width', cardLayout.rowWidth + 'px');
+						$cards.append($cardRow);
+					}
+					$cardRow.append($card);
+					cardIndex++;
 					var $cardAppsEl = $card.find('.user-card-apps-icons');
-					if (applist.length === 0) {
+					if (displayApplist.length === 0) {
 						$cardAppsEl.text('--');
 					} else {
-						applist.forEach(function(app) { $cardAppsEl.append(buildAppIconEl(app)); });
+						displayApplist.forEach(function(app) { $cardAppsEl.append(buildAppIconEl(app, app.current)); });
 					}
 				}
 				apply_view_mode();
@@ -947,7 +1017,7 @@
             console.error("Chart element not found");
             return;
         }
-        var myChart = echarts.init($chartElement.get(0));
+        var myChart = echarts.init($chartElement.get(0), null, { renderer: FWX_ECHART_RENDERER });
         if (!data) {
             return;
         }
@@ -1106,12 +1176,12 @@
 
 		<div id="user_table_wrapper" class="user-table-wrapper">
 
-		<table class="table cbi-section-table" id="user_status_table" style="table-layout: fixed; width: 100%; min-width: 1240px;">
+		<table class="table cbi-section-table" id="user_status_table" style="table-layout: fixed; width: 100%; min-width: 1350px;">
 			<tr class="tr">
-				<th class="th" style="width: 100px;">
+				<th class="th" style="width: 150px;">
 					<%:Device Info%>
 				</th>
-				<th class="th" style="width: 85px;">
+				<th class="th" style="width: 100px;">
 					<%:IP Address%>
 				</th>
 				<th class="th" style="width: 60px;">
@@ -1126,16 +1196,16 @@
 				<th class="th" id="session_count_header" style="width: 70px; display: none;">
 					<%:Session Count%>
 				</th>
-				<th class="th" style="width: 60px;">
-					<%:Today Traffic%>
+				<th class="th" style="width: 60px;" title="&#20170;&#26085;&#19978;&#32593;&#27969;&#37327;">
+					&#19978;&#32593;&#27969;&#37327;
 				</th>
-				<th class="th" style="width: 110px;">
-					<%:Common App(TOP5)%>
+				<th class="th" style="width: 75px;" title="&#20170;&#26085;&#19978;&#32593;&#26102;&#38271;">
+					&#19978;&#32593;&#26102;&#38271;
 				</th>
-				<th class="th" style="width: 70px;">
-					<%:Active Apps%>
+				<th class="th" style="width: 130px;">
+					<%:Common App%>
 				</th>
-					<th class="th" style="width: 110px;">
+					<th class="th" style="width: 130px;">
 						<%:Visiting URL%>
 					</th>
 					<th class="th" style="width: 75px;">
@@ -1473,22 +1543,108 @@
 		word-break: keep-all;
 	}
 
+	.user-device-info {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+	}
+
+	.user-device-icon {
+		width: 32px;
+		height: 32px;
+		border-radius: 7px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 32px;
+		color: #fff;
+		font-size: 14px;
+		font-weight: 700;
+		line-height: 1;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		box-sizing: border-box;
+		overflow: hidden;
+	}
+
+	[data-darkmode="true"] .user-device-icon {
+		border-color: rgba(148, 163, 184, 0.35);
+	}
+
+	.user-device-text {
+		min-width: 112px;
+		line-height: 1.35;
+	}
+
+	.user-device-name,
+	.user-device-mac {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.user-device-mac {
+		font-size: 12px;
+		opacity: 0.82;
+		overflow: visible;
+		text-overflow: clip;
+	}
+
+	.user-app-icon-current::before {
+		content: "";
+		position: absolute;
+		top: -2px;
+		right: -2px;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: #22c55e;
+		border: 1px solid rgba(255, 255, 255, 0.95);
+		box-sizing: border-box;
+		z-index: 2;
+	}
+
+	.user-app-icon-current {
+		overflow: visible !important;
+	}
+
 	.user-card-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		display: flex;
+		flex-direction: column;
+		align-items: center;
 		gap: 14px;
 		margin-top: 6px;
+		width: 100%;
+		margin-left: auto;
+		margin-right: auto;
+		box-sizing: border-box;
+	}
+
+	.user-card-row {
+		display: flex;
+		justify-content: flex-start;
+		gap: 14px;
+		width: 100%;
+		box-sizing: border-box;
 	}
 
 	.user-card {
-		border: 1px solid var(--border-color-low, #e5e7eb);
+		border: 1px solid rgba(0, 0, 0, 0.12);
 		border-radius: 12px;
-		background: var(--background-color-high, #fff);
+		background: transparent;
 		padding: 14px;
-		box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+		box-shadow: none;
 		display: flex;
+		flex: 0 0 400px;
 		flex-direction: column;
 		gap: 10px;
+		width: 400px;
+		max-width: 400px;
+		box-sizing: border-box;
+	}
+
+	[data-darkmode="true"] .user-card {
+		border-color: rgba(255, 255, 255, 0.15);
 	}
 
 	.user-card-head {
@@ -1496,6 +1652,13 @@
 		justify-content: space-between;
 		align-items: flex-start;
 		gap: 10px;
+	}
+
+	.user-card-device {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
 	}
 
 	.user-card-title-wrap {
@@ -1513,6 +1676,15 @@
 
 	.user-card-subtitle {
 		margin-top: 4px;
+		font-size: 12px;
+		color: var(--text-color-medium, #6b7280);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.user-card-ip {
+		margin-top: 2px;
 		font-size: 12px;
 		color: var(--text-color-medium, #6b7280);
 		overflow: hidden;
@@ -1596,13 +1768,26 @@
 		font-weight: 600;
 	}
 
+	.user-card-rate {
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 8px;
+		white-space: nowrap;
+	}
+
 	.user-card-apps .user-card-value .user-app-icon-wrap {
-		margin-left: 6px;
+		margin-left: 0;
 		margin-right: 0 !important;
+	}
+
+	.user-card-apps .user-card-value .user-app-icon-wrap + .user-app-icon-wrap {
+		margin-left: 4px;
 	}
 
 	.user-card-apps .user-card-value .user-app-icon-img {
 		margin: 0 !important;
+		border-radius: 5px;
 	}
 
 	.user-card-empty {
@@ -1647,12 +1832,12 @@
 		}
 
 		#user_status_table {
-			min-width: 1240px !important;
+			min-width: 1350px !important;
 		}
 
 		#user_table_wrapper #user_status_table.table.cbi-section-table {
 			display: table !important;
-			width: 1240px !important;
+			width: 1350px !important;
 			table-layout: fixed !important;
 		}
 
@@ -1682,10 +1867,16 @@
 		}
 
 		.user-card-grid {
-			grid-template-columns: minmax(0, 1fr);
+			display: flex;
+		}
+
+		.user-card-row {
+			max-width: none !important;
 		}
 
 		.user-card {
+			flex-basis: 100%;
+			max-width: none;
 			width: 100%;
 			box-sizing: border-box;
 			padding: 12px;

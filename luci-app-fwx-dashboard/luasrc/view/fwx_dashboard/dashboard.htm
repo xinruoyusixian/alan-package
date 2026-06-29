@@ -27,7 +27,7 @@
         display: grid;
         grid-template-columns: 1fr 300px; 
         gap: 12px;
-        padding: 0 8px 8px;
+        padding: 0 0 8px;
         box-sizing: border-box;
     }
     .card {
@@ -714,14 +714,31 @@
     }
     .list table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .list th, .list td { border-bottom: 1px solid var(--border-color-low); padding: 6px 4px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .list th:nth-child(1), .list td:nth-child(1) { width: 12%; } 
+    .list th:nth-child(1), .list td:nth-child(1) { width: 14%; }
     .list th:nth-child(2), .list td:nth-child(2) { width: 10%; } 
     .list th:nth-child(3), .list td:nth-child(3) { width: 10%; } 
     .list th:nth-child(4), .list td:nth-child(4) { width: 10%; } 
     .list th:nth-child(5), .list td:nth-child(5) { width: 12%; } 
     .list th:nth-child(6), .list td:nth-child(6) { width: 12%; } 
     .list th:nth-child(7), .list td:nth-child(7) { width: 12%; } 
-    .list th:nth-child(8), .list td:nth-child(8) { width: 22%; } 
+    .list th:nth-child(8), .list td:nth-child(8) { width: 20%; }
+    .dashboard-device-info { display:flex; align-items:center; gap:6px; min-width:0; }
+    .dashboard-device-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 24px;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        box-sizing: border-box;
+    }
+    .dashboard-device-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     .right-col { display: grid; gap: 10px; align-content: start; }
     .right-col .mini {
         position: relative;
@@ -835,7 +852,7 @@
         flex-direction: column;
         gap: 0;
         padding: 0;
-        height: 385px;
+        height: 350px;
         overflow: hidden;
         position: relative;
         justify-content: flex-start;
@@ -1036,7 +1053,7 @@
         .dash {
             grid-template-columns: 1fr;  
             gap: 12px;
-            padding: 6px;
+            padding: 0 0 6px;
             min-width: 800px; 
         }
         
@@ -1203,7 +1220,7 @@
                 <h3><%:Active Terminals Top8%></h3>
                 <table>
                     <thead>
-                        <tr><th><%:Name%></th><th><%:IP%></th><th><%:Upstream Rate%></th><th><%:Downstream Rate%></th><th><%:Upstream Traffic%></th><th><%:Downstream Traffic%></th><th><%:Current App%></th><th><%:Current URL%></th></tr>
+                        <tr><th>&#32456;&#31471;&#20449;&#24687;</th><th><%:IP%></th><th><%:Upstream Rate%></th><th><%:Downstream Rate%></th><th><%:Upstream Traffic%></th><th><%:Downstream Traffic%></th><th><%:Current App%></th><th><%:Current URL%></th></tr>
                     </thead>
                     <tbody id="client-body"></tbody>
                 </table>
@@ -1975,7 +1992,7 @@
             var todayUp = parseInt(sys.flow.today_up) || 0; // KB
             var todayDown = parseInt(sys.flow.today_down) || 0; // KB
             var totalFlowKB = todayUp + todayDown;
-            $('#mini-traffic').text(formatMemory(totalFlowKB));
+            $('#mini-traffic').text(formatTraffic(totalFlowKB * 1024));
         }
         
         if(sys.cpu !== undefined){
@@ -2126,9 +2143,10 @@
     setBar('storage-overlay-bar','',0);
     
     var TRAFFIC_SAMPLE_POINTS = 60;
-    var pieApp = echarts.init($('#pie-app')[0]);
-    var lineWan = echarts.init($('#line-wan')[0]);
-    var barUserTraffic = echarts.init($('#bar-user-traffic')[0]);
+    var FWX_ECHART_RENDERER = 'svg';
+    var pieApp = echarts.init($('#pie-app')[0], null, { renderer: FWX_ECHART_RENDERER });
+    var lineWan = echarts.init($('#line-wan')[0], null, { renderer: FWX_ECHART_RENDERER });
+    var barUserTraffic = echarts.init($('#bar-user-traffic')[0], null, { renderer: FWX_ECHART_RENDERER });
 
 
     function getCSSVariable(name, defaultValue) {
@@ -2153,18 +2171,20 @@
     };
     var palette = [
         '#58a6ff',
-        '#7c8cff',
+        '#8b5cf6',
         '#72b7a1',
         '#4dc7ff',
         '#f6b26b',
-        '#ff9f80',
+		'#14b8a6',
         '#d39f6a',
-        '#f9d77e',
-        '#60a5fa',
+        '#22c55e',
+        '#f59e0b',
         '#c79abb',
         '#fda4af',
-        '#93c5fd'
+        '#14b8a6'
     ];
+    var userTrafficUpColor = '#58a6ff';
+    var userTrafficDownColor = '#8b7bff';
     
     var currentAppStatsType = 'daily';
     
@@ -2358,7 +2378,7 @@
 
     barUserTraffic.setOption({
         backgroundColor: 'transparent',
-        color: ['#58a6ff', '#8b7bff'], 
+        color: [userTrafficUpColor, userTrafficDownColor],
         textStyle: { color: axisLabelColor },
         tooltip: {
             trigger: 'item', 
@@ -2382,8 +2402,8 @@
                 return displayName + '<br/>' +
                        'MAC: ' + (user.mac || '') + '<br/>' +
                        _IP + ': ' + user.ip + '<br/>' +
-                       '<span style="color:#58a6ff;">&bull;</span> ' + _Upstream + ': ' + upStr + '<br/>' +
-                       '<span style="color:#8b7bff;">&bull;</span> ' + _Downstream + ': ' + downStr + '<br/>' +
+                       '<span style="color:' + userTrafficUpColor + ';">&bull;</span> ' + _Upstream + ': ' + upStr + '<br/>' +
+                       '<span style="color:' + userTrafficDownColor + ';">&bull;</span> ' + _Downstream + ': ' + downStr + '<br/>' +
                        _Total + ': ' + totalStr;
             },
             confine: true 
@@ -2697,29 +2717,11 @@
         }
     }
     
-    function bytes(v){ 
-        if (v >= 1024 * 1024) {
-            var mb = v / (1024 * 1024);
-            return mb.toFixed(1) + ' MB/s';
-        } else if (v >= 1024) {
-            var kb = v / 1024;
-            return Math.round(kb) + ' KB/s';
-        }
-        return Math.round(v) + ' B/s';
+    function bytes(v){
+        return formatRate(v);
     }
     
     function updateWanRealtimeRate(upBytes, downBytes) {
-        var formatRate = function(bytes) {
-            if (bytes >= 1024 * 1024) {
-                var mb = bytes / (1024 * 1024);
-                return mb.toFixed(1) + ' MB/s';
-            } else if (bytes >= 1024) {
-                var kb = bytes / 1024;
-                return Math.round(kb) + ' KB/s';
-            }
-            return Math.round(bytes) + ' B/s';
-        };
-        
         var $upRate = $('#wan-up-rate');
         var $downRate = $('#wan-down-rate');
         if ($upRate.length) {
@@ -2767,15 +2769,7 @@
             max: 20 * 1024 * 6,  
             axisLabel:{ 
                 formatter:function(v){
-                    if (v === 0) return '0';
-                    if (v >= 1024 * 1024) {
-                        var mb = v / (1024 * 1024);
-                        return mb.toFixed(1) + ' MB/s';
-                    } else if (v >= 1024) {
-                        var kb = v / 1024;
-                        return Math.round(kb) + ' KB/s';
-                    }
-                    return Math.round(v) + ' B/s';
+                    return formatRate(v);
                 }, 
                 color:axisLabelColor 
             }, 
@@ -2828,45 +2822,32 @@
     var $tbody = $('#client-body');
     var activeUsersData = [];
     var activeUsersByMac = {};
+
+    function floorFixed(value, digits) {
+        var scale = Math.pow(10, digits);
+        return (Math.floor(value * scale) / scale).toFixed(digits);
+    }
     
     function formatRate(bytesPerSec) {
-        if (bytesPerSec < 1024) {
-            return bytesPerSec + ' B/s';
-        } else if (bytesPerSec < 1024 * 1024) {
-            var kb = bytesPerSec / 1024;
-            return (kb % 1 === 0 ? kb.toFixed(0) : kb.toFixed(1)) + ' KB/s';
-        } else {
-            var mb = bytesPerSec / (1024 * 1024);
-            if (mb >= 1) {
-                return (mb % 1 === 0 ? mb.toFixed(0) : mb.toFixed(1)) + ' MB/s';
-            } else {
-                var kb = bytesPerSec / 1024;
-                return (kb % 1 === 0 ? kb.toFixed(0) : kb.toFixed(1)) + ' KB/s';
-            }
+        var value = Number(bytesPerSec) || 0;
+        if (value >= 1024 * 1024) {
+            return floorFixed(value / (1024 * 1024), 1) + ' MB/s';
         }
+        if (value >= 1024) {
+            return Math.floor(value / 1024) + ' KB/s';
+        }
+        return Math.floor(value) + ' B/s';
     }
     
     function formatTraffic(bytes) {
-        if (bytes < 1024) {
-            return bytes + ' B';
-        } else if (bytes < 1024 * 1024) {
-            return Math.round(bytes / 1024) + ' KB';
-        } else if (bytes < 1024 * 1024 * 1024) {
-            var mb = bytes / (1024 * 1024);
-            if (mb >= 1) {
-                return Math.round(mb) + ' MB';
-            } else {
-                return Math.round(bytes / 1024) + ' KB';
-            }
-        } else {
-            var gb = bytes / (1024 * 1024 * 1024);
-            if (gb >= 1) {
-                return (gb % 1 === 0 ? gb.toFixed(0) : gb.toFixed(1)) + ' GB';
-            } else {
-                var mb = bytes / (1024 * 1024);
-                return Math.round(mb) + ' MB';
-            }
+        var value = Number(bytes) || 0;
+        if (value >= 1024 * 1024 * 1024) {
+            return floorFixed(value / (1024 * 1024 * 1024), 1) + ' GB';
         }
+        if (value >= 1024 * 1024) {
+            return floorFixed(value / (1024 * 1024), 1) + ' MB';
+        }
+        return Math.floor(value / 1024) + ' KB';
     }
     
     function formatUserDisplayName(user) {
@@ -2884,6 +2865,25 @@
         }
         
         return formatUserName(rawName, user.mac || '');
+    }
+
+    var DEVICE_ICON_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899','#84cc16','#6366f1'];
+    function deviceIconColor(value) {
+        value = value || '';
+        var hash = 0;
+        for (var i = 0; i < value.length; i++) {
+            hash = value.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return DEVICE_ICON_COLORS[Math.abs(hash) % DEVICE_ICON_COLORS.length];
+    }
+
+    function buildDashboardDeviceIconHtml(displayName, mac) {
+        var source = displayName || mac || '?';
+        var firstChar = '?';
+        if (source && source !== '--') {
+            firstChar = String(source).trim().charAt(0).toUpperCase() || '?';
+        }
+        return '<span class="dashboard-device-icon" style="background:' + deviceIconColor(mac || source) + ';">' + escapeHtml(firstChar) + '</span>';
     }
 
     function normalizeMacKey(mac) {
@@ -2975,11 +2975,18 @@
             var app = (user.app && user.app.trim() !== '') ? user.app : '--';
             var url = (user.url && user.url.trim() !== '') ? user.url : '--';
             
-            var titleAttr = (name !== fullName && fullName) ? ' title="' + fullName + '"' : '';
+            var mac = user.mac || '';
+            var hasDeviceAlias = !!((user.nickname && user.nickname.trim() !== '') || (user.hostname && user.hostname.trim() !== ''));
+            var titleText = (hasDeviceAlias && mac) ? mac : ((name !== fullName && fullName) ? fullName : '');
+            var titleAttr = titleText ? ' title="' + escapeHtml(titleText) + '"' : '';
+            var deviceHtml = '<div class="dashboard-device-info"' + titleAttr + '>' +
+                buildDashboardDeviceIconHtml(name, mac) +
+                '<span class="dashboard-device-name">' + escapeHtml(name) + '</span>' +
+                '</div>';
             
             return '<tr>' +
-                '<td' + titleAttr + '>' + name + '</td>' +
-                '<td title="' + (ip || '') + '">' + ip + '</td>' +
+                '<td>' + deviceHtml + '</td>' +
+                '<td title="' + escapeHtml(ip || '') + '">' + escapeHtml(ip) + '</td>' +
                 '<td>' + upRate + '</td>' +
                 '<td>' + downRate + '</td>' +
                 '<td>' + upTraffic + '</td>' +

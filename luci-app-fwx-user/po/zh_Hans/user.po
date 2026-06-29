@@ -77,6 +77,9 @@ msgstr "正在收集数据..."
 msgid "Back to User List"
 msgstr "返回终端列表"
 
+msgid "Back"
+msgstr "返回"
+
 msgid "Missing MAC parameter"
 msgstr "缺少MAC参数"
 
@@ -137,8 +140,14 @@ msgstr "上行速率"
 msgid "Downstream Rate"
 msgstr "下行速率"
 
+msgid "Rate"
+msgstr "速率"
+
 msgid "Common App(TOP5)"
 msgstr "常用APP(TOP5)"
+
+msgid "Common App"
+msgstr "常用APP"
 
 msgid "Active Apps"
 msgstr "活跃APP"

@@ -4,6 +4,7 @@
 <script type="text/javascript" src="<%=resource%>/echarts.min.js?v=5.0"></script>
 
 <script type="text/javascript">//<![CDATA[
+	const FWX_ECHART_RENDERER = 'svg';
 	let visit_time_data = [];
 	let visit_list_data = {};
 	let visit_cur_page = 1;
@@ -543,7 +544,7 @@
 			if (!isVisible) {
 				return;
 			}
-			appTimeChart = echarts.init(chartElement);
+			appTimeChart = echarts.init(chartElement, null, { renderer: FWX_ECHART_RENDERER });
 		}
 		
 		if (!data) {
@@ -889,7 +890,7 @@
 			hourlyTrafficChart = null;
 		}
 		
-		hourlyTrafficChart = echarts.init(chartDom);
+		hourlyTrafficChart = echarts.init(chartDom, null, { renderer: FWX_ECHART_RENDERER });
 		if (!hourlyTrafficChart) {
 			console.error('Failed to initialize hourlyTrafficChart');
 			return;
@@ -1057,7 +1058,7 @@
 			hourlyAppsChart.dispose();
 		}
 		
-		hourlyAppsChart = echarts.init(chartDom);
+		hourlyAppsChart = echarts.init(chartDom, null, { renderer: FWX_ECHART_RENDERER });
 		
 		var hours = [];
 		var appSeries = {}; // appid -> {name, data: []}
@@ -1486,14 +1487,40 @@
 		tbody.innerHTML = html;
 	}
 
+	function render_behavior_whitelist_hint(data) {
+		var hint = document.getElementById('behavior_whitelist_hint');
+		if (!hint) return;
+
+		var messages = [];
+		if (data && parseInt(data.af_whitelist, 10) === 1) {
+			messages.push('<%:Matched app filter whitelist, all app filter rules are ineffective.%>');
+		}
+		if (data && parseInt(data.mf_whitelist, 10) === 1) {
+			messages.push('<%:Matched MAC filter whitelist, all MAC filter rules are ineffective.%>');
+		}
+
+		if (messages.length === 0) {
+			hint.style.display = 'none';
+			hint.innerHTML = '';
+			return;
+		}
+
+		hint.innerHTML = messages.map(function(message) {
+			return '<div class="behavior-whitelist-hint-item">' + message + '</div>';
+		}).join('');
+		hint.style.display = 'block';
+	}
+
 	function loadBehaviorRules() {
 		if (!mac) return;
 		var tbody = document.getElementById('behavior_rule_tbody');
+		render_behavior_whitelist_hint({});
 		if (tbody) {
 			tbody.innerHTML = '<tr class="tr"><td class="td" colspan="4" style="text-align:center;"><%:Loading...%></td></tr>';
 		}
 		new XHR().get("<%=url('admin/fwx/get_user_parental_control_rules')%>", {mac: mac}, function(x, data) {
 			var list = (data && Array.isArray(data.list)) ? data.list : [];
+			render_behavior_whitelist_hint(data || {});
 			render_behavior_rule_table(list);
 		});
 	}
@@ -1528,7 +1555,7 @@
 			if (!appTimeChart) {
 				var chartElement = document.getElementById('app_time_chart');
 				if (chartElement) {
-					appTimeChart = echarts.init(chartElement);
+					appTimeChart = echarts.init(chartElement, null, { renderer: FWX_ECHART_RENDERER });
 				}
 			}
 			if (visit_time_data && visit_time_data.length > 0) {
@@ -1582,12 +1609,14 @@
 
 <div class="cbi-map">
 	<div class="cbi-section">
-		<div style="margin-bottom: 20px;">
-			<a href="<%=url("admin/fwx_user/list")%>" class="cbi-button cbi-button-back"><%:Back to User List%></a>
-		</div>
-		
 		<div style="padding: 20px; border-radius: 5px; background: inherit; color: inherit;">
-			<h4 style="margin: 0 0 20px 0; color: inherit;"><%:User Detail%>(<span id="device-title-mac">--</span>)</h4>
+			<div class="user-detail-header">
+				<a href="<%=url("admin/fwx_user/list")%>" class="detail-back-link" title="<%:Back%>">
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 5.5 9 12l6.5 6.5-1.4 1.4L6.2 12l7.9-7.9 1.4 1.4z"></path></svg>
+					<span><%:Back%></span>
+				</a>
+				<h4 class="user-detail-title"><%:User Detail%>(<span id="device-title-mac">--</span>)</h4>
+			</div>
 			
 			<ul class="tab-list">
 				<li class="tab-item active" onclick="showTabContent('tab-user-info', this)"><%:Basic Info%></li>
@@ -1600,7 +1629,7 @@
 			</ul>
 
 			<div id="tab-user-info" class="tab-body active">
-				<div style="padding: 20px;">
+				<div>
 					<table class="table cbi-section-table" style="width: 100%;">
 						<tr class="tr">
 							<td class="td" style="width: 120px; font-weight: bold;"><%:MAC Address%></td>
@@ -1615,7 +1644,7 @@
 							<td class="td">
 								<div id="basic_info_nickname_wrapper" class="nickname-inline" onmouseleave="onNicknameMouseLeave(event)">
 									<span id="basic_info_nickname_text">--</span>
-									<button type="button" id="basic_info_nickname_edit" class="nickname-edit-btn" onclick="startNicknameEdit()" title="<%:Edit Remark%>">&#9998;</button>
+									<button type="button" id="basic_info_nickname_edit" class="nickname-edit-btn" onclick="startNicknameEdit()" title="<%:Edit Remark%>" aria-label="<%:Edit Remark%>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10.5a2.5 2.5 0 0 1 2.5 2.5v3.2l-2 2V6.5a.5.5 0 0 0-.5-.5H5.5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h5.2l-.4 2H5.5A2.5 2.5 0 0 1 3 17.5v-11A2.5 2.5 0 0 1 5.5 4z"></path><path d="M7 8h7v1.8H7V8zm0 4h5.8v1.8H7V12zm8.8 7.4l-4 .8.8-4 6.3-6.3 3.2 3.2-6.3 6.3zm4.1-6.3l-1-1-4.4 4.4-.3 1.4 1.4-.3 4.3-4.5z"></path></svg></button>
 									<input type="text" id="basic_info_nickname_input" class="nickname-input" onblur="onNicknameInputBlur()" onkeydown="onNicknameInputKeydown(event)" oncompositionstart="onNicknameCompositionStart()" oncompositionend="onNicknameCompositionEnd()" maxlength="32" style="display:none;">
 									<button type="button" id="basic_info_nickname_confirm" class="nickname-confirm-btn" onmousedown="onNicknameConfirmMouseDown(event)" style="display:none;"><%:OK%></button>
 								</div>
@@ -1656,7 +1685,8 @@
 			</div>
 
 			<div id="tab-behavior-rules" class="tab-body">
-				<div style="padding: 20px;">
+				<div>
+					<div id="behavior_whitelist_hint" class="behavior-whitelist-hint" style="display: none;"></div>
 					<table class="table cbi-section-table behavior-rule-table" style="width: 100%;">
 						<thead>
 							<tr class="tr table-titles">
@@ -1752,6 +1782,44 @@
 <div id="nickname_toast" class="nickname-toast"></div>
 
 <style>
+	.user-detail-header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-bottom: 20px;
+	}
+
+	.detail-back-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		height: 28px;
+		padding: 0 8px 0 4px;
+		border-radius: 5px;
+		color: var(--text-color-medium, #6b7280);
+		text-decoration: none;
+		font-size: 13px;
+		line-height: 28px;
+	}
+
+	.detail-back-link svg {
+		width: 18px;
+		height: 18px;
+		fill: currentColor;
+		display: block;
+	}
+
+	.detail-back-link:hover {
+		background: var(--background-color-low, #f5f5f5);
+		color: var(--text-color-high, #333);
+		text-decoration: none;
+	}
+
+	.user-detail-title {
+		margin: 0;
+		color: inherit;
+	}
+
 	.tab-container {
 		margin-top: 20px;
 	}
@@ -1806,6 +1874,19 @@
 	.behavior-rule-table .td {
 		text-align: left;
 		vertical-align: middle;
+	}
+
+	.behavior-whitelist-hint {
+		margin-bottom: 12px;
+		padding: 10px 12px;
+		border: 1px solid rgba(59, 130, 246, 0.35);
+		border-radius: 5px;
+		background: rgba(59, 130, 246, 0.08);
+		color: #3b82f6;
+	}
+
+	.behavior-whitelist-hint-item + .behavior-whitelist-hint-item {
+		margin-top: 6px;
 	}
 
 	.behavior-module-name {
@@ -1878,16 +1959,18 @@
 
 	.nickname-inline {
 		position: relative;
-		display: inline-block;
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
 		width: 230px;
 		min-height: 24px;
-		padding-right: 56px;
 		vertical-align: middle;
 	}
 
 	#basic_info_nickname_text {
 		display: block;
-		width: 100%;
+		flex: 0 1 auto;
+		max-width: 180px;
 		height: 24px;
 		line-height: 24px;
 		white-space: nowrap;
@@ -1899,23 +1982,27 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		position: absolute;
-		right: 0;
-		top: 2px;
-		width: 20px;
-		height: 20px;
-		line-height: 20px;
-		border: 1px solid var(--border-color-medium, #d1d5db);
-		background: var(--background-color-low, #f5f5f5);
+		flex: 0 0 28px;
+		width: 28px;
+		height: 26px;
+		line-height: 26px;
+		border: 0;
+		background: transparent;
 		color: var(--text-color-medium, #6b7280);
 		border-radius: 3px;
 		cursor: pointer;
 		padding: 0;
-		font-size: 12px;
+	}
+
+	.nickname-edit-btn svg {
+		width: 21px;
+		height: 21px;
+		fill: currentColor;
+		display: block;
 	}
 
 	.nickname-edit-btn:hover {
-		background: var(--background-color-medium, #eeeeee);
+		background: transparent;
 		color: var(--text-color-high, #333);
 	}
 
@@ -1923,9 +2010,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		position: absolute;
-		right: 0;
-		top: 0;
+		flex: 0 0 auto;
 		height: 24px;
 		padding: 0 10px;
 		border: 1px solid var(--border-color-medium, #d1d5db);
@@ -1942,7 +2027,9 @@
 	}
 
 	.nickname-input {
-		width: 100%;
+		flex: 1 1 auto;
+		width: auto;
+		min-width: 0;
 		height: 24px;
 		padding: 2px 6px;
 		border: 1px solid var(--border-color-medium, #d1d5db);
