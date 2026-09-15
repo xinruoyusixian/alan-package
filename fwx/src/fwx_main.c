@@ -69,12 +69,33 @@ u_int32_t fwx_log_level = 3;
 #define SET_APPID(ct, appid) ((ct)->fwx_data.app_id = (appid))
 #define GET_APPID(ct) ((ct)->fwx_data.app_id)
 #define MAX_OAF_NETLINK_MSG_LEN 1024
-#define MAX_AF_SUPPORT_DATA_LEN 3000
+#define MAX_AF_SUPPORT_DATA_LEN 4096
 #define AF_AC_CHARSET_SIZE 256
 
 
 int af_match_port(port_info_t *info, int port);
 int af_match_one(flow_info_t *flow, af_feature_node_t *node);
+
+static void fwx_update_ct_host(struct nf_conn *ct, const char *host, unsigned int len)
+{
+	size_t host_size;
+
+	if (!ct || !host)
+		return;
+
+	host_size = sizeof(ct->fwx_data.host);
+	if (len < MIN_REPORT_URL_LEN || len >= host_size)
+		return;
+
+	if (ct->fwx_data.host[0] &&
+	    strnlen((const char *)ct->fwx_data.host, host_size) == len &&
+	    strncmp((const char *)ct->fwx_data.host, host, len) == 0) {
+		return;
+	}
+
+	memcpy(ct->fwx_data.host, host, len);
+	ct->fwx_data.host[len] = '\0';
+}
 
 typedef struct af_ac_output_item {
 	struct list_head list;
@@ -339,7 +360,6 @@ static int af_is_regex_host_pattern(const char *host_url)
 	if (!strchr(host_url, '$')) {
 		return 0;
 	}
-	printk("host %s is regex\n", host_url);
 	return 1;
 }
 
@@ -1001,9 +1021,69 @@ int add_app_feature(int appid, char *name, char *feature)
 	return 0;
 }
 
+static char *af_trim_space(char *text)
+{
+	char *end;
+
+	if (!text)
+		return NULL;
+	while (*text && isspace(*text))
+		text++;
+	end = text + strlen(text);
+	while (end > text && isspace(end[-1]))
+		*--end = '\0';
+	return text;
+}
+
+static int af_parse_feature_app_header(char *feature_str, int *app_id,
+					       char *app_name, size_t app_name_len)
+{
+	char header[128] = {0};
+	char *slash;
+	char *id_text;
+	char *name_text;
+	char *colon;
+	char *end_text;
+	long id = 0;
+	size_t header_len;
+
+	if (!feature_str || !app_id || !app_name || app_name_len == 0)
+		return -1;
+	colon = strchr(feature_str, ':');
+	if (!colon)
+		return -1;
+	header_len = colon - feature_str;
+	if (header_len == 0 || header_len >= sizeof(header))
+		return -1;
+	memcpy(header, feature_str, header_len);
+	header[header_len] = '\0';
+
+	slash = strchr(header, '~');
+	if (!slash)
+		return -1;
+	*slash = '\0';
+	id_text = af_trim_space(header);
+	name_text = af_trim_space(slash + 1);
+	if (!id_text || !id_text[0] || !name_text || !name_text[0])
+		return -1;
+	if (kstrtol(id_text, 10, &id) < 0 || id <= 0)
+		return -1;
+	end_text = id_text;
+	while (*end_text && !isspace(*end_text))
+		end_text++;
+	end_text = af_trim_space(end_text);
+	if (end_text && end_text[0] != '\0')
+		return -1;
+
+	*app_id = (int)id;
+	strncpy(app_name, name_text, app_name_len - 1);
+	app_name[app_name_len - 1] = '\0';
+	return 0;
+}
+
 void af_init_feature(char *feature_str)
 {
-	int app_id;
+	int app_id = 0;
 	char app_name[128] = {0};
 	char *feature_buf = NULL;
 	char feature[MAX_FEATURE_STR_LEN] = {0};
@@ -1020,9 +1100,10 @@ void af_init_feature(char *feature_str)
 	memset(feature_buf, 0, MAX_FEATURE_LINE_LEN);
 
 	if (strstr(feature_str, "#"))
-		return;
+		goto out;
 
-	k_sscanf(feature_str, "%d%[^:]", &app_id, app_name);
+	if (af_parse_feature_app_header(feature_str, &app_id, app_name, sizeof(app_name)) < 0)
+		goto out;
 	while (*p++)
 	{
 		if (*p == '[')
@@ -1069,6 +1150,7 @@ void af_init_feature(char *feature_str)
 	}
 	g_feature_count++;  
 
+out:
 	if (feature_buf)
 		kfree(feature_buf);
 }
@@ -1156,37 +1238,24 @@ void af_feature_load_done_msg_handle(void)
 	}
 }
 
-static unsigned char *read_skb(struct sk_buff *skb, unsigned int from, unsigned int len)
+static unsigned char *read_skb(struct sk_buff *skb, int from, int len)
 {
-	struct skb_seq_state state;
 	unsigned char *msg_buf = NULL;
-	unsigned int consumed = 0;
 
-	msg_buf = kmalloc(len, GFP_KERNEL);
+	if (!skb || from < 0 || len <= 0 || from > skb->len ||
+	    len > skb->len - from)
+		return NULL;
+
+	msg_buf = kmalloc(len, GFP_ATOMIC);
 	if (!msg_buf)
 		return NULL;
 
-	skb_prepare_seq_read(skb, from, from + len, &state);
-	while (1)
-	{
-		unsigned int avail;
-		const u8 *ptr;
-		avail = skb_seq_read(consumed, &ptr, &state);
-		if (avail == 0)
-		{
-			break;
-		}
-		memcpy(msg_buf + consumed, ptr, avail);
-		consumed += avail;
-		if (consumed >= len)
-		{
-			skb_abort_seq_read(&state);
-			break;
-		}
+	if (skb_copy_bits(skb, from, msg_buf, len)) {
+		kfree(msg_buf);
+		return NULL;
 	}
 	return msg_buf;
 }
-
 int parse_flow_proto(struct sk_buff *skb, flow_info_t *flow)
 {
 	unsigned char *ipp;
@@ -1952,6 +2021,7 @@ int update_url_visiting_info(af_client_info_t *client, flow_info_t *flow)
 	if (af_is_ip_literal_host(host_buf))
 		return -1;
 
+	fwx_update_ct_host(flow->ct, host_buf, len);
 	memcpy(client->visiting.visiting_url, host_buf, len);
 	client->visiting.visiting_url[len] = 0x0; 
 	client->visiting.url_time = af_get_timestamp_sec();
@@ -2154,7 +2224,7 @@ u_int32_t fwx_hook_bypass_handle(struct sk_buff *skb, struct net_device *dev)
 
 
 	if (conn->app_id == 0 && conn->drop == 1){
-		send_reset_packet(skb, &flow);
+		//send_reset_packet(skb, &flow);
 		return NF_DROP;
 	}
 	if (conn->app_id != 0)
@@ -2174,8 +2244,9 @@ u_int32_t fwx_hook_bypass_handle(struct sk_buff *skb, struct net_device *dev)
 				return NF_ACCEPT;
 			}
 		}
-		if (skb_is_nonlinear(skb) && flow.l4_len < MAX_AF_SUPPORT_DATA_LEN)
+		if (skb_is_nonlinear(skb))
 		{
+			flow.l4_len = min(flow.l4_len, MAX_AF_SUPPORT_DATA_LEN);
 			flow.l4_data = read_skb(skb, flow.l4_data - skb->data, flow.l4_len);
 			if (!flow.l4_data)
 				return NF_ACCEPT;
@@ -2281,6 +2352,7 @@ u_int32_t fwx_hook_gateway_handle(struct sk_buff *skb, struct net_device *dev)
 	ct = nf_ct_get(skb, &ctinfo);
 	if (ct == NULL)
 		return NF_ACCEPT;
+	flow.ct = ct;
 
 	if (flow.l4_protocol == IPPROTO_TCP && !nf_ct_is_confirmed(ct)){
 		return NF_ACCEPT;
@@ -2365,11 +2437,14 @@ u_int32_t fwx_hook_gateway_handle(struct sk_buff *skb, struct net_device *dev)
 	if (total_packets > MAX_DPI_PKT_NUM)
 		return NF_ACCEPT;
 
-	if (skb_is_nonlinear(skb) && flow.l4_len < MAX_AF_SUPPORT_DATA_LEN)
+	if (skb_is_nonlinear(skb))
 	{
+		flow.l4_len = min(flow.l4_len, MAX_AF_SUPPORT_DATA_LEN);
 		flow.l4_data = read_skb(skb, flow.l4_data - skb->data, flow.l4_len);
 		if (!flow.l4_data)
 			return NF_ACCEPT;
+		
+		AF_LMT_DEBUG("##match nonlinear skb, len = %d\n", flow.l4_len);
 		malloc_data = 1;
 	}
 	dpi_main(&flow);
@@ -2580,7 +2655,7 @@ static void fwx_timer_func(unsigned long ptr)
 	mod_timer(&fwx_timer, jiffies + FWX_TIMER_INTERVAL * HZ);
 }
 
-void init_fwx_timer(void)
+static void init_fwx_timer(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
 	timer_setup(&fwx_timer, fwx_timer_func, 0);
@@ -2591,9 +2666,13 @@ void init_fwx_timer(void)
 	AF_INFO("init fwx timer...ok");
 }
 
-void fini_fwx_timer(void)
+static void fini_fwx_timer(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+	timer_shutdown_sync(&fwx_timer);
+#else
 	del_timer_sync(&fwx_timer);
+#endif
 	AF_INFO("del fwx timer...ok");
 }
 
@@ -2694,7 +2773,7 @@ static void fwx_netlink_msg_rcv(struct sk_buff *skb)
 	}
 }
 
-int netlink_fwx_init(void)
+static int netlink_fwx_init(void)
 {
 	struct netlink_kernel_cfg nl_cfg = {0};
 	nl_cfg.input = fwx_netlink_msg_rcv;

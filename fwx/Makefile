@@ -20,14 +20,21 @@ define KernelPackage/fwx/description
   fwx netfilter module 
 endef
 
-
-EXTRA_CFLAGS:=-Wno-declaration-after-statement -Wno-strict-prototypes -Wno-unused-variable -Wno-implicit-fallthrough -Wno-missing-braces -Wno-parentheses -Wno-format -Wno-missing-prototypes -Wno-missing-declarations -Wno-misleading-indentation -Wno-frame-larger-than -Wno-missing-prototypes -Wno-missing-declarations
+KCFLAGS := -Wno-error=missing-prototypes \
+           -Wno-error=missing-declarations \
+           -Wno-error=unused-variable \
+           -Wno-error=declaration-after-statement \
+           -Wno-error=implicit-fallthrough \
+           -Wno-error=missing-braces \
+           -Wno-error=parentheses \
+           -Wno-error=format \
+           -Wno-frame-larger-than
 
 
 MAKE_OPTS:= \
 	$(KERNEL_MAKE_FLAGS) \
 	M="$(PKG_BUILD_DIR)" \
-	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" \
+	KCFLAGS="$(KCFLAGS)" \
 	$(EXTRA_KCONFIG)
 
 define Build/Compile
